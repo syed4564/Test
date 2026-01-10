@@ -1,48 +1,50 @@
-name: Run Workflow with Email Input
+name: RustDesk Remote Access
 
 on:
   workflow_dispatch:
     inputs:
-      email:
-        description: 'Email to use for screen sharing'
+      rustdesk_id:
+        description: 'RustDesk ID for connection'
         required: true
+        type: string
+      rustdesk_password:
+        description: 'RustDesk password'
+        required: true
+        type: string
+      rustdesk_server:
+        description: 'RustDesk Server address (optional for self-hosted)'
+        required: false
         type: string
 
 jobs:
   build:
-    name: Start Remote Desktop with Email Input
+    name: Start RustDesk Remote Access
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Print Email Input
+      - name: Install RustDesk
         run: |
-          echo "Email Address: ${{ github.event.inputs.email }}"
-          
-      - name: Install GetScreen.me
-        run: |
-          Write-Output "📥 Downloading GetScreen.me..."
-          $url = "https://getscreen.me/download/getscreen.msi"
-          $msiPath = "$env:TEMP\\getscreen.msi"
-          Invoke-WebRequest -Uri $url -OutFile $msiPath
+          $rustdeskUrl = "https://github.com/rustdesk/rustdesk/releases/download/v1.1.9/rustdesk-1.1.9-x86_64.msi"
+          $rustdeskInstallerPath = "$env:TEMP\\rustdesk-installer.msi"
+          Invoke-WebRequest -Uri $rustdeskUrl -OutFile $rustdeskInstallerPath
+          Start-Process msiexec.exe -ArgumentList "/i `"$rustdeskInstallerPath`" /qn" -Wait
+          Write-Output "✅ RustDesk installed."
 
-          Write-Output "📦 Installing GetScreen.me..."
-          Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /norestart" -Wait
+      - name: Start RustDesk Session
+        run: |
+          $rustdesk_id = "${{ github.event.inputs.rustdesk_id }}"
+          $rustdesk_password = "${{ github.event.inputs.rustdesk_password }}"
+          $rustdesk_server = "${{ github.event.inputs.rustdesk_server }}"
           
-          $exePath = "${env:ProgramFiles}\\GetScreen.me\\getscreen.exe"
-          if (Test-Path $exePath) {
-            Write-Output "🔑 Registering GetScreen.me with email..."
-            Start-Process -FilePath $exePath -ArgumentList "-install -register ${{ github.event.inputs.email }} -hidden -no-gui"
-            Start-Sleep -Seconds 10
-            Start-Service -Name "GetScreen" -ErrorAction SilentlyContinue
-            Set-Service -Name "GetScreen" -StartupType Automatic -ErrorAction SilentlyContinue
-            Write-Output "✅ GetScreen.me installed and registered successfully."
+          $rustdeskExePath = "C:\\Program Files\\RustDesk\\rustdesk.exe"
+
+          if ($rustdesk_server) {
+            Start-Process -FilePath "$rustdeskExePath" -ArgumentList "--id=$rustdesk_id --password=$rustdesk_password --server=$rustdesk_server --no-ui" -Wait
           } else {
-            Write-Error "❌ GetScreen.exe not found after install!"
+            Start-Process -FilePath "$rustdeskExePath" -ArgumentList "--id=$rustdesk_id --password=$rustdesk_password --no-ui" -Wait
           }
-
+          Write-Output "✅ RustDesk session started."
+      
       - name: Set Screen Resolution to 1366x768
         shell: cmd
         run: |
