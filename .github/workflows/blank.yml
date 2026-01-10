@@ -1,41 +1,50 @@
-name: Remote Desktop
+name: RustDesk Remote Access
 
 on:
   workflow_dispatch:
     inputs:
-      remote_code:
-        description: 'Enter Chrome Remote Desktop Code'
+      rustdesk_id:
+        description: 'RustDesk ID for connection'
         required: true
+        type: string
+      rustdesk_password:
+        description: 'RustDesk password'
+        required: true
+        type: string
+      rustdesk_server:
+        description: 'RustDesk Server address (optional for self-hosted)'
+        required: false
         type: string
 
 jobs:
   build:
-    name: Start RDP with Software, VPN, Audio, and Loop
+    name: Start RustDesk Remote Access
     runs-on: windows-latest
 
     steps:
-      - name: Install Chrome Remote Desktop Host
+      - name: Install RustDesk
         run: |
-          $msiUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-          $msiPath = "$env:TEMP\\chromeremotedesktophost.msi"
-          Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath
-          Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn" -Wait
-          Write-Output "✅ Chrome Remote Desktop installed."
+          $rustdeskUrl = "https://github.com/rustdesk/rustdesk/releases/download/v1.1.9/rustdesk-1.1.9-x86_64.msi"
+          $rustdeskInstallerPath = "$env:TEMP\\rustdesk-installer.msi"
+          Invoke-WebRequest -Uri $rustdeskUrl -OutFile $rustdeskInstallerPath
+          Start-Process msiexec.exe -ArgumentList "/i `"$rustdeskInstallerPath`" /qn" -Wait
+          Write-Output "✅ RustDesk installed."
 
-      - name: Start Chrome Remote Desktop Session
+      - name: Start RustDesk Session
         run: |
-          # Ensure that the code is passed from the workflow dispatch
-          $code = "${{ github.event.inputs.remote_code }}"  # Use the input code from GitHub dispatch
-          $redirect = "https://remotedesktop.google.com/_/oauthredirect"
+          $rustdesk_id = "${{ github.event.inputs.rustdesk_id }}"
+          $rustdesk_password = "${{ github.event.inputs.rustdesk_password }}"
+          $rustdesk_server = "${{ github.event.inputs.rustdesk_server }}"
           
-          # Use PowerShell to properly resolve environment variables
-          $hostName = $env:COMPUTERNAME
-          $exePath = "${env:ProgramFiles(x86)}\\Google\\Chrome Remote Desktop\\CurrentVersion\\remoting_start_host.exe"
-          
-          # Start Chrome Remote Desktop Host with the provided code and environment variables
-          Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$hostName --pin=123456" -Wait
-          Write-Output "✅ Chrome Remote Desktop Host started with PIN 123456."
+          $rustdeskExePath = "C:\\Program Files\\RustDesk\\rustdesk.exe"
 
+          if ($rustdesk_server) {
+            Start-Process -FilePath "$rustdeskExePath" -ArgumentList "--id=$rustdesk_id --password=$rustdesk_password --server=$rustdesk_server --no-ui" -Wait
+          } else {
+            Start-Process -FilePath "$rustdeskExePath" -ArgumentList "--id=$rustdesk_id --password=$rustdesk_password --no-ui" -Wait
+          }
+          Write-Output "✅ RustDesk session started."
+      
       - name: Set Screen Resolution to 1366x768
         shell: cmd
         run: |
