@@ -1,34 +1,44 @@
-name: Install RustDesk and Retrieve Remote ID
+name: Remote Desktop (RustDesk)
 
 on:
   workflow_dispatch:
 
 jobs:
-  rustdesk_installation:
+  build:
+    name: Start RustDesk with Audio and Screen Sharing
     runs-on: windows-latest
 
     steps:
-      - name: Install RustDesk and Retrieve Remote ID
+      - name: Install RustDesk
         run: |
-          # PowerShell Script to download and install RustDesk
+          # Step 1: Download RustDesk installer
           $rustdesk_url = "https://github.com/rustdesk/rustdesk/releases/download/1.4.5/rustdesk-1.4.5-x86_64.exe"
           $download_path = "$env:TEMP\rustdesk-1.4.5-x86_64.exe"
+          
+          # Download RustDesk installer using Invoke-WebRequest
           Invoke-WebRequest -Uri $rustdesk_url -OutFile $download_path
+
+          # Step 2: Install RustDesk silently
           Start-Process -FilePath $download_path -ArgumentList "/S" -Wait
           Write-Output "✅ RustDesk installed successfully."
-          
-          # Run RustDesk in background mode
+
+      - name: Start RustDesk
+        run: |
+          # Step 3: Launch RustDesk
           Start-Process -FilePath "C:\Program Files\RustDesk\rustdesk.exe" -ArgumentList "--no-ui" -Wait
           Write-Output "✅ RustDesk launched silently."
 
-          # Extract remote ID and password from RustDesk log
+      - name: Retrieve Remote ID and Password from RustDesk Log
+        run: |
+          # Step 4: Attempt to extract Remote ID and Password from RustDesk log file
           $log_file_path = "$env:APPDATA\RustDesk\rustdesk.log"
           $log_content = Get-Content -Path $log_file_path -Raw
 
-          # Regular Expressions to extract remote ID and password
+          # Regex patterns to extract Remote ID and Password
           $remote_id_pattern = "Remote ID: (\d+)"
           $password_pattern = "Password: (\d+)"
 
+          # Extract Remote ID and Password using regex
           $remote_id = [regex]::Match($log_content, $remote_id_pattern).Groups[1].Value
           $password = [regex]::Match($log_content, $password_pattern).Groups[1].Value
 
@@ -36,9 +46,60 @@ jobs:
               Write-Output "✅ Remote ID: $remote_id"
               Write-Output "✅ One-Time Password: $password"
           } else {
-              Write-Output "❌ Failed to extract Remote ID or Password from the log file."
+              Write-Error "❌ Failed to extract Remote ID or Password from the log file."
           }
 
           # Set GitHub Action outputs
           echo "::set-output name=remote_id::$remote_id"
           echo "::set-output name=password::$password"
+
+      - name: Install VB-CABLE Virtual Audio Driver (Manual Confirmation Required)
+        run: |
+          # Step 5: Download VB-CABLE Driver Pack
+          $zip = "$env:TEMP\\VBCABLE.zip"
+          $extract = "$env:TEMP\\VBCABLE"
+          $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $extract
+
+          # Step 6: Launch Installer Without Waiting
+          $setup = "$extract\\VBCABLE_Setup_x64.exe"
+          if (Test-Path $setup) {
+            Start-Process -FilePath $setup -ArgumentList "-i -h"
+            Write-Output "⚠️ VB-CABLE installer launched — please RDP in and approve the driver install prompt manually."
+          } else {
+            Write-Error "❌ Setup file not found."
+          }
+
+          # Step 7: Enable and Start Windows Audio Services
+          Start-Service "AudioSrv"
+          Start-Service "AudioEndpointBuilder"
+          Set-Service -Name "AudioSrv" -StartupType Automatic
+          Set-Service -Name "AudioEndpointBuilder" -StartupType Automatic
+          Write-Output "✅ Windows audio services started."
+
+          # Step 8: Download NirCmd and Attempt to Set Default Playback Device
+          $nircmdUrl = "https://www.nirsoft.net/utils/nircmd.zip"
+          $nircmdZip = "$env:TEMP\\nircmd.zip"
+          $nircmdExtract = "$env:TEMP\\nircmd"
+          Invoke-WebRequest -Uri $nircmdUrl -OutFile $nircmdZip
+          Expand-Archive -Path $nircmdZip -DestinationPath $nircmdExtract
+
+          $nircmdExe = "$nircmdExtract\\nircmd.exe"
+          if (Test-Path $nircmdExe) {
+            Start-Process -FilePath $nircmdExe -ArgumentList "setdefaultsounddevice `"CABLE Input`" 0"
+            Write-Output "✅ Attempted to set 'CABLE Input' as default playback device."
+          } else {
+            Write-Error "❌ NirCmd not found."
+          }
+
+      - name: Clone Loop Repository and Run loop.bat
+        run: |
+          # Step 9: Clone Loop Repository
+          git clone https://github.com/Alex15969/Loop
+          Write-Output "✅ Cloned Loop repository."
+
+          # Step 10: Run loop.bat
+          cd Loop
+          cmd /c loop.bat
+          Write-Output "✅ loop.bat executed."
