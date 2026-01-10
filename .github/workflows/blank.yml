@@ -1,4 +1,4 @@
-name: Remote Desktop Colab
+name: Remote Desktop
 
 on:
   workflow_dispatch:
@@ -24,13 +24,18 @@ jobs:
 
       - name: Start Chrome Remote Desktop Session
         run: |
+          # Ensure that the code is passed from the workflow dispatch
           $code = "${{ github.event.inputs.remote_code }}"  # Use the input code from GitHub dispatch
           $redirect = "https://remotedesktop.google.com/_/oauthredirect"
+          
+          # Use PowerShell to properly resolve environment variables
           $hostName = $env:COMPUTERNAME
           $exePath = "${env:ProgramFiles(x86)}\\Google\\Chrome Remote Desktop\\CurrentVersion\\remoting_start_host.exe"
+          
+          # Start Chrome Remote Desktop Host with the provided code and environment variables
           Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$hostName --pin=123456" -Wait
           Write-Output "✅ Chrome Remote Desktop Host started with PIN 123456."
-      
+
       - name: Set Screen Resolution to 1366x768
         shell: cmd
         run: |
@@ -49,7 +54,7 @@ jobs:
           ) else (
               echo ❌ NirCmd executable not found.
           )
-
+      
       - name: Set Screen Resolution to 1366x768
         shell: cmd
         run: |
