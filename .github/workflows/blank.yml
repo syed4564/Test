@@ -1,4 +1,4 @@
-name: Remote Desktop Colab
+name: Remote Desktop
 
 on:
   workflow_dispatch:
@@ -31,7 +31,7 @@ jobs:
           Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$hostName --pin=123456" -Wait
           Write-Output "✅ Chrome Remote Desktop Host started with the code $code."
       
-      - name: Set Screen Resolution to 1366x768
+       - name: Set Screen Resolution to 1366x768
         shell: cmd
         run: |
           @echo off
