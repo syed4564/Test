@@ -54,25 +54,6 @@ jobs:
           ) else (
               echo ❌ NirCmd executable not found.
           )
-      
-      - name: Set Screen Resolution to 1366x768
-        shell: cmd
-        run: |
-          @echo off
-          set "nircmd_zip=%TEMP%\nircmd.zip"
-          set "nircmd_dir=%TEMP%\nircmd"
-          set "nircmd_exe=%nircmd_dir%\nircmd.exe"
-          echo Downloading NirCmd...
-          curl -L -o "%nircmd_zip%" "https://www.nirsoft.net/utils/nircmd.zip"
-          echo Extracting NirCmd...
-          powershell -Command "Expand-Archive -Path '%nircmd_zip%' -DestinationPath '%nircmd_dir%' -Force"
-          if exist "%nircmd_exe%" (
-              echo Setting resolution to 1366x768...
-              "%nircmd_exe%" setdisplay 1366 768 32
-              echo ✅ Resolution changed successfully.
-          ) else (
-              echo ❌ NirCmd executable not found.
-          )
 
       - name: Software Installation (WinRAR + IDM + Tor Browser)
         run: |
