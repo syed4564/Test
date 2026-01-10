@@ -1,171 +1,44 @@
-name: RustDesk Remote Access
+name: Install RustDesk and Retrieve Remote ID
 
 on:
   workflow_dispatch:
-    inputs:
-      rustdesk_id:
-        description: 'RustDesk ID for connection'
-        required: true
-        type: string
-      rustdesk_password:
-        description: 'RustDesk password'
-        required: true
-        type: string
-      rustdesk_server:
-        description: 'RustDesk Server address (optional for self-hosted)'
-        required: false
-        type: string
 
 jobs:
-  build:
-    name: Start RustDesk Remote Access
+  rustdesk_installation:
     runs-on: windows-latest
 
     steps:
-      - name: Install RustDesk
+      - name: Install RustDesk and Retrieve Remote ID
         run: |
-          $rustdeskUrl = "https://github.com/rustdesk/rustdesk/releases/download/v1.1.9/rustdesk-1.1.9-x86_64.msi"
-          $rustdeskInstallerPath = "$env:TEMP\\rustdesk-installer.msi"
-          Invoke-WebRequest -Uri $rustdeskUrl -OutFile $rustdeskInstallerPath
-          Start-Process msiexec.exe -ArgumentList "/i `"$rustdeskInstallerPath`" /qn" -Wait
-          Write-Output "✅ RustDesk installed."
-
-      - name: Start RustDesk Session
-        run: |
-          $rustdesk_id = "${{ github.event.inputs.rustdesk_id }}"
-          $rustdesk_password = "${{ github.event.inputs.rustdesk_password }}"
-          $rustdesk_server = "${{ github.event.inputs.rustdesk_server }}"
+          # PowerShell Script to download and install RustDesk
+          $rustdesk_url = "https://github.com/rustdesk/rustdesk/releases/download/1.4.5/rustdesk-1.4.5-x86_64.exe"
+          $download_path = "$env:TEMP\rustdesk-1.4.5-x86_64.exe"
+          Invoke-WebRequest -Uri $rustdesk_url -OutFile $download_path
+          Start-Process -FilePath $download_path -ArgumentList "/S" -Wait
+          Write-Output "✅ RustDesk installed successfully."
           
-          $rustdeskExePath = "C:\\Program Files\\RustDesk\\rustdesk.exe"
+          # Run RustDesk in background mode
+          Start-Process -FilePath "C:\Program Files\RustDesk\rustdesk.exe" -ArgumentList "--no-ui" -Wait
+          Write-Output "✅ RustDesk launched silently."
 
-          if ($rustdesk_server) {
-            Start-Process -FilePath "$rustdeskExePath" -ArgumentList "--id=$rustdesk_id --password=$rustdesk_password --server=$rustdesk_server --no-ui" -Wait
+          # Extract remote ID and password from RustDesk log
+          $log_file_path = "$env:APPDATA\RustDesk\rustdesk.log"
+          $log_content = Get-Content -Path $log_file_path -Raw
+
+          # Regular Expressions to extract remote ID and password
+          $remote_id_pattern = "Remote ID: (\d+)"
+          $password_pattern = "Password: (\d+)"
+
+          $remote_id = [regex]::Match($log_content, $remote_id_pattern).Groups[1].Value
+          $password = [regex]::Match($log_content, $password_pattern).Groups[1].Value
+
+          if ($remote_id -and $password) {
+              Write-Output "✅ Remote ID: $remote_id"
+              Write-Output "✅ One-Time Password: $password"
           } else {
-            Start-Process -FilePath "$rustdeskExePath" -ArgumentList "--id=$rustdesk_id --password=$rustdesk_password --no-ui" -Wait
-          }
-          Write-Output "✅ RustDesk session started."
-      
-      - name: Set Screen Resolution to 1366x768
-        shell: cmd
-        run: |
-          @echo off
-          set "nircmd_zip=%TEMP%\nircmd.zip"
-          set "nircmd_dir=%TEMP%\nircmd"
-          set "nircmd_exe=%nircmd_dir%\nircmd.exe"
-          echo Downloading NirCmd...
-          curl -L -o "%nircmd_zip%" "https://www.nirsoft.net/utils/nircmd.zip"
-          echo Extracting NirCmd...
-          powershell -Command "Expand-Archive -Path '%nircmd_zip%' -DestinationPath '%nircmd_dir%' -Force"
-          if exist "%nircmd_exe%" (
-              echo Setting resolution to 1366x768...
-              "%nircmd_exe%" setdisplay 1366 768 32
-              echo ✅ Resolution changed successfully.
-          ) else (
-              echo ❌ NirCmd executable not found.
-          )
-
-      - name: Software Installation (WinRAR + IDM + Tor Browser)
-        run: |
-          # Install WinRAR 7.12 silently
-          $winrarUrl = "https://www.rarlab.com/rar/winrar-x64-712.exe"
-          $winrarPath = "$env:TEMP\\winrar-x64-712.exe"
-          Invoke-WebRequest -Uri $winrarUrl -OutFile $winrarPath
-          Start-Process -FilePath $winrarPath -ArgumentList "/S" -Wait
-          Write-Output "✅ WinRAR 7.12 installed silently."
-
-          # Install IDM silently
-          $idmUrl = "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
-          $idmPath = "$env:TEMP\\idm_setup.exe"
-          Invoke-WebRequest -Uri $idmUrl -OutFile $idmPath
-          if (Test-Path $idmPath) {
-            Start-Process -FilePath $idmPath -ArgumentList "/skipdlgs" -Wait
-            Write-Output "✅ IDM installed silently."
-          } else {
-            Write-Error "❌ IDM download failed."
+              Write-Output "❌ Failed to extract Remote ID or Password from the log file."
           }
 
-          # Download and extract Browser.zip (Tor Browser)
-          $dropboxUrl = "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
-          $zipPath = "$env:TEMP\\browser.zip"
-          $extractPath = "$env:USERPROFILE\\browser"
-          Invoke-WebRequest -Uri $dropboxUrl -OutFile $zipPath
-          if (Test-Path $zipPath) {
-            Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-            Write-Output "✅ Browser.zip extracted to $extractPath"
-          } else {
-            Write-Error "❌ Failed to download Browser.zip"
-          }
-
-          # Create 'Tor' shortcut on Desktop
-          $firefox = "$extractPath\\Browser\\firefox.exe"
-          $shortcut = "$env:USERPROFILE\\Desktop\\Tor.lnk"
-          if (Test-Path $firefox) {
-            $shell = New-Object -ComObject WScript.Shell
-            $s = $shell.CreateShortcut($shortcut)
-            $s.TargetPath = $firefox
-            $s.WorkingDirectory = "$extractPath\\Browser"
-            $s.IconLocation = "$firefox,0"
-            $s.Save()
-            Write-Output "✅ Tor Browser shortcut created on Desktop"
-          } else {
-            Write-Error "❌ firefox.exe (Tor) not found"
-          }
-
-      - name: Install VPN Gate (via install_vpngate.bat)
-        run: |
-          $vpnURL = "https://www.dropbox.com/scl/fo/a6c0sqactnwr26cbbv1uc/APO1J80osQpo_8EoBOU3eJA?rlkey=s7wgg6ieuhlkr7wlxa9j9yij6&dl=1"
-          $zipPath = "$env:TEMP\\vpn_bundle.zip"
-          $extractPath = "$env:USERPROFILE\\Desktop\\vpn_bundle"
-          $batPath = "$extractPath\\install_vpngate.bat"
-          $vpnCheck = "C:\\Program Files\\SoftEther VPN Client\\vpncmgr.exe"
-          Write-Output "📥 Downloading VPN automation bundle..."
-          Invoke-WebRequest -Uri $vpnURL -OutFile $zipPath
-          Write-Output "📦 Extracting VPN bundle..."
-          Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-          if (-Not (Test-Path $batPath)) {
-            Write-Error "❌ install_vpngate.bat not found!"
-            exit 1
-          }
-          Write-Output "🚀 Running install_vpngate.bat..."
-          Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batPath`"" -WorkingDirectory $extractPath
-          $maxWait = 300
-          $interval = 5
-          $elapsed = 0
-          Write-Output "⏳ Waiting for vpncmgr.exe to appear..."
-          while (-not (Test-Path $vpnCheck) -and ($elapsed -lt $maxWait)) {
-              Start-Sleep -Seconds $interval
-              $elapsed += $interval
-              Write-Output "🔁 Checking... elapsed: $elapsed sec"
-          }
-          if (Test-Path $vpnCheck) {
-              Write-Output "✅ VPN Gate installed successfully."
-          } else {
-              Write-Error "❌ VPN Gate installation timed out after $maxWait seconds."
-              exit 1
-          }
-
-      - name: Install VB-CABLE Virtual Audio Driver
-        run: |
-          $zip = "$env:TEMP\\VBCABLE.zip"
-          $extract = "$env:TEMP\\VBCABLE"
-          $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
-          Invoke-WebRequest -Uri $url -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath $extract
-          $setup = "$extract\\VBCABLE_Setup_x64.exe"
-          if (Test-Path $setup) {
-            Start-Process -FilePath $setup -ArgumentList "-i -h"
-            Write-Output "⚠️ VB-CABLE installer launched — manual driver prompt expected."
-          } else {
-            Write-Error "❌ VB-CABLE setup file not found."
-          }
-          Start-Service "AudioSrv"
-          Start-Service "AudioEndpointBuilder"
-          Set-Service -Name "AudioSrv" -StartupType Automatic
-          Set-Service -Name "AudioEndpointBuilder" -StartupType Automatic
-          Write-Output "✅ Audio services running."
-          
-      - name: Clone Loop Repository and Run loop.bat
-        run: |
-          git clone https://github.com/Alex15969/Loop
-          cd Loop
-          cmd /c loop.bat
+          # Set GitHub Action outputs
+          echo "::set-output name=remote_id::$remote_id"
+          echo "::set-output name=password::$password"
