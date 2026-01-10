@@ -4,54 +4,58 @@ on:
   workflow_dispatch:
     inputs:
       rustdesk_id:
-        description: 'RustDesk ID for connection'
+        description: 'RustDesk ID for connection (optional)'
         required: false
         type: string
       rustdesk_password:
-        description: 'RustDesk password'
+        description: 'RustDesk password (optional)'
+        required: false
+        type: string
+      rustdesk_server:
+        description: 'RustDesk Server address (optional for self-hosted)'
         required: false
         type: string
 
 jobs:
   build:
-    name: Start RustDesk Remote Access
+    name: Install and Start RustDesk for Remote Access
     runs-on: windows-latest
 
     steps:
-      - name: Install RustDesk
+      - name: Downloading and Installing RustDesk
         run: |
           Write-Output "📥 Downloading RustDesk..."
-          $url = "https://github.com/rustdesk/rustdesk/releases/download/v1.1.9/rustdesk-1.1.9-x86_64.msi"
+          $rustdeskUrl = "https://github.com/rustdesk/rustdesk/releases/download/v1.1.9/rustdesk-1.1.9-x86_64.msi"
           $rustdeskInstallerPath = "$env:TEMP\\rustdesk-installer.msi"
-          Invoke-WebRequest -Uri $url -OutFile $rustdeskInstallerPath
+          Invoke-WebRequest -Uri $rustdeskUrl -OutFile $rustdeskInstallerPath
           Write-Output "📦 Installing RustDesk..."
           Start-Process msiexec.exe -ArgumentList "/i `"$rustdeskInstallerPath`" /qn" -Wait
           Write-Output "✅ RustDesk installed."
 
-      - name: Start RustDesk Session
+      - name: Start RustDesk Session and Capture ID & Password
         run: |
+          Write-Output "Starting RustDesk..."
           $rustdeskExePath = "C:\\Program Files\\RustDesk\\rustdesk.exe"
           Start-Process -FilePath "$rustdeskExePath" -ArgumentList "--no-ui" -Wait
-          Write-Output "✅ RustDesk started."
 
-      - name: Get RustDesk ID and Password
-        run: |
-          # Wait for RustDesk to start and generate ID
-          Start-Sleep -Seconds 10
-          $rustdeskExePath = "C:\\Program Files\\RustDesk\\rustdesk.exe"
+          Write-Output "Waiting for RustDesk to generate the ID and Password..."
+          Start-Sleep -Seconds 10  # wait for RustDesk to generate ID & Password
           
-          # Read RustDesk logs to find the ID and Password (or output them directly if possible)
+          # Simulate fetching ID and Password from RustDesk's log or any output method
           $rustdeskLog = "C:\\ProgramData\\RustDesk\\rustdesk.log"
-          
-          # Simulate fetching the ID and Password from the log file
+
           if (Test-Path $rustdeskLog) {
+            Write-Output "Fetching RustDesk log..."
             $logContent = Get-Content $rustdeskLog
-            $rustdeskID = ($logContent -match 'Remote ID:\s*(\d+)') | Out-String
-            $rustdeskPassword = ($logContent -match 'Password:\s*(\d+)') | Out-String
+
+            # Extract ID and Password (this part depends on the RustDesk output format)
+            $rustdeskID = ($logContent | Select-String -Pattern 'Remote ID:\s*(\d+)').Matches.Value
+            $rustdeskPassword = ($logContent | Select-String -Pattern 'Password:\s*(\d+)').Matches.Value
+
             Write-Output "RustDesk ID: $rustdeskID"
             Write-Output "RustDesk Password: $rustdeskPassword"
           } else {
-            Write-Error "RustDesk log file not found!"
+            Write-Error "❌ RustDesk log file not found!"
           }
       
       - name: Set Screen Resolution to 1366x768
