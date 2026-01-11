@@ -26,32 +26,32 @@ jobs:
           $exePath = "${env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
           Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$env:COMPUTERNAME --pin=123456" -Wait
 
-      - name: Set Screen Resolution
+      - name: Set Resolution & Solid Black Wallpaper (Quick Fix)
         shell: cmd
         run: |
           curl -L -o "%TEMP%\nircmd.zip" "https://www.nirsoft.net/utils/nircmd.zip"
           powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
+          :: Set Screen Resolution
           "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
+          :: Force Solid Black Background instantly
+          "%TEMP%\nircmd\nircmd.exe" setdesktopcolor 0 0 0
 
-      - name: Apply Dark Mode & Solid Black Wallpaper
+      - name: Personalization (Dark Mode & Taskbar Fix)
         run: |
-          Write-Output "🌙 Configuring Dark Mode and Taskbar..."
+          # Force Dark Mode for System and Apps
           $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
           if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force }
-          # Set Dark Mode for both Apps and the Windows System (Taskbar/Start Menu)
-          Set-ItemProperty -Path $regPath -Name "AppsUseLightTheme" -Value 0
           Set-ItemProperty -Path $regPath -Name "SystemUsesLightTheme" -Value 0
+          Set-ItemProperty -Path $regPath -Name "AppsUseLightTheme" -Value 0
 
-          Write-Output "🖤 Setting Solid Black Wallpaper..."
-          # Set background color to black and remove wallpaper image
-          Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name "Background" -Value "0 0 0"
+          # Clean up wallpaper registry to ensure solid color stays
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
           
-          # Force the UI to refresh to apply Dark Taskbar and Black Wallpaper immediately
+          # RESTART EXPLORER: This is the 'Quick Fix' for the UI to show changes
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
           Start-Process explorer.exe
-          Write-Output "✅ UI Personalization Complete."
+          Write-Output "✅ UI is now Dark and Background is Clean Black."
 
       - name: Install WinRAR & IDM
         run: |
@@ -61,7 +61,6 @@ jobs:
           curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
           
-          # IDM Startup configuration
           $idmPath = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
           if (Test-Path $idmPath) {
               Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
@@ -75,7 +74,7 @@ jobs:
           Expand-Archive -Path "$env:TEMP\vpn_bundle.zip" -DestinationPath "$env:USERPROFILE\Desktop\vpn_bundle" -Force
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn_bundle"
 
-      - name: Install Discord (Fast Method)
+      - name: Install Discord
         run: |
           $url = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
           curl.exe -L $url -o "$env:TEMP\DiscordSetup.exe"
@@ -85,14 +84,14 @@ jobs:
         run: |
           $shell = New-Object -ComObject WScript.Shell
           
-          # Discord Shortcut
+          # Discord
           $updateExe = "$env:LOCALAPPDATA\Discord\Update.exe"
           $dShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
           $dShortcut.TargetPath = $updateExe
           $dShortcut.Arguments = "--processStart Discord.exe"
           $dShortcut.Save()
 
-          # Tor Browser
+          # Tor
           curl.exe -L -o "$env:TEMP\browser.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
           Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath "$env:USERPROFILE\browser" -Force
           $tShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
