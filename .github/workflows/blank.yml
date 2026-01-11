@@ -1,4 +1,4 @@
-name: Remote Desktop Colab 3
+name: Remote Desktop Colab 1
 on:  
   workflow_dispatch:
     inputs:
@@ -26,103 +26,85 @@ jobs:
           $exePath = "${env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
           Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$env:COMPUTERNAME --pin=123456" -Wait
 
-      - name: Set Resolution & Force Dark Mode + Black Wallpaper
+      - name: Optimization (Resolution + Dark Mode + Black Wallpaper)
         run: |
-          # 1. Set Resolution using NirCmd
+          # 1. Set Resolution
           curl.exe -L -o "$env:TEMP\nircmd.zip" "https://www.nirsoft.net/utils/nircmd.zip"
           Expand-Archive -Path "$env:TEMP\nircmd.zip" -DestinationPath "$env:TEMP\nircmd" -Force
           & "$env:TEMP\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-          # 2. Force Dark Mode (Taskbar & Apps)
+          # 2. Force Dark Mode Registry
           $ThemePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
           if (-not (Test-Path $ThemePath)) { New-Item -Path $ThemePath -Force }
           Set-ItemProperty -Path $ThemePath -Name "AppsUseLightTheme" -Value 0
           Set-ItemProperty -Path $ThemePath -Name "SystemUsesLightTheme" -Value 0
 
-          # 3. Create a Physical Solid Black Wallpaper Image
+          # 3. Create Solid Black Image & Set Wallpaper
           Add-Type -AssemblyName System.Drawing
           $bmp = New-Object System.Drawing.Bitmap(1920, 1080)
-          $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-          $graphics.Clear([System.Drawing.Color]::Black)
-          $wallPath = "$env:TEMP\black.bmp"
-          $bmp.Save($wallPath)
-          $graphics.Dispose()
-          $bmp.Dispose()
-
-          # 4. Set Registry for Wallpaper
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value $wallPath
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2"
+          $g = [System.Drawing.Graphics]::FromImage($bmp); $g.Clear([System.Drawing.Color]::Black)
+          $wall = "$env:TEMP\black.bmp"; $bmp.Save($wall); $g.Dispose(); $bmp.Dispose()
+          
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value $wall
           Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name "Background" -Value "0 0 0"
 
-          # 5. Use Windows API to Refresh Wallpaper Immediately
-          $code = @'
+          # 4. Force Update via Windows User32 API
+          $api = @'
           using System.Runtime.InteropServices;
-          public class WallSetter {
-              [DllImport("user32.dll", CharSet = CharSet.Auto)]
-              public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+          public class UI {
+            [DllImport("user32.dll", CharSet = CharSet.Auto)]
+            public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
           }
           '@
-          Add-Type -TypeDefinition $code
-          [WallSetter]::SystemParametersInfo(20, 0, $wallPath, 3)
+          Add-Type -TypeDefinition $api
+          [UI]::SystemParametersInfo(20, 0, $wall, 3)
 
-          # 6. Restart Explorer to apply Dark Taskbar
+          # 5. Refresh Shell
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
           Start-Process explorer.exe
-          Write-Output "✅ UI Configured: Resolution 1366x768, Dark Mode, Solid Black Wallpaper."
+          Write-Output "✅ Environment Clean and Dark."
 
-      - name: Install WinRAR & IDM
+      - name: Fast Software Installation (IDM, WinRAR, VPN, Discord)
         run: |
+          # WinRAR
           curl.exe -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
-          Start-Process -FilePath "$env:TEMP\winrar.exe" -ArgumentList "/S" -Wait
+          Start-Process "$env:TEMP\winrar.exe" "/S" -Wait
           
-          curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
-          Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
-          
-          $idmPath = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
-          if (Test-Path $idmPath) {
-              Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
-              Start-Process -FilePath $idmPath -ArgumentList "/onstartup"
-          }
+          # IDM
+          curl.exe -L -o "$env:TEMP\idm.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
+          Start-Process "$env:TEMP\idm.exe" "/skipdlgs" -Wait
+          $idm = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idm`" /onstartup"
+          Start-Process $idm "/onstartup"
 
-      - name: Install VPN Gate (Priority)
-        run: |
+          # VPN Gate
           $vpnURL = "https://www.dropbox.com/scl/fo/a6c0sqactnwr26cbbv1uc/APO1J80osQpo_8EoBOU3eJA?rlkey=s7wgg6ieuhlkr7wlxa9j9yij6&dl=1"
-          curl.exe -L -o "$env:TEMP\vpn_bundle.zip" $vpnURL
-          Expand-Archive -Path "$env:TEMP\vpn_bundle.zip" -DestinationPath "$env:USERPROFILE\Desktop\vpn_bundle" -Force
-          Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn_bundle"
+          curl.exe -L -o "$env:TEMP\vpn.zip" $vpnURL
+          Expand-Archive "$env:TEMP\vpn.zip" "$env:USERPROFILE\Desktop\vpn" -Force
+          Start-Process "cmd.exe" "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn"
 
-      - name: Install Discord (Fast Method)
+          # Discord
+          curl.exe -L "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64" -o "$env:TEMP\discord.exe"
+          Start-Process "$env:TEMP\discord.exe" "/S"
+
+      - name: Final Setup (Tor + Audio + Loop)
         run: |
-          $url = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
-          curl.exe -L $url -o "$env:TEMP\DiscordSetup.exe"
-          Start-Process -FilePath "$env:TEMP\DiscordSetup.exe" -ArgumentList "/S"
+          # Tor
+          curl.exe -L -o "$env:TEMP\tor.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
+          Expand-Archive "$env:TEMP\tor.zip" "$env:USERPROFILE\browser" -Force
+          
+          # Shortcuts
+          $s = New-Object -ComObject WScript.Shell
+          $t = $s.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk"); $t.TargetPath = "$env:USERPROFILE\browser\Browser\firefox.exe"; $t.Save()
+          $d = $s.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk"); $d.TargetPath = "$env:LOCALAPPDATA\Discord\Update.exe"; $d.Arguments = "--processStart Discord.exe"; $d.Save()
 
-      - name: Setup Shortcuts & Tor
-        run: |
-          $shell = New-Object -ComObject WScript.Shell
-          $updateExe = "$env:LOCALAPPDATA\Discord\Update.exe"
-          $dShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-          $dShortcut.TargetPath = $updateExe
-          $dShortcut.Arguments = "--processStart Discord.exe"
-          $dShortcut.Save()
-
-          $torZip = "$env:TEMP\browser.zip"
-          curl.exe -L -o $torZip "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
-          Expand-Archive -Path $torZip -DestinationPath "$env:USERPROFILE\browser" -Force
-          $tShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
-          $tShortcut.TargetPath = "$env:USERPROFILE\browser\Browser\firefox.exe"
-          $tShortcut.Save()
-
-      - name: Install VB-CABLE Audio
-        run: |
-          curl.exe -L -o "$env:TEMP\VBCABLE.zip" "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
-          Expand-Archive -Path "$env:TEMP\VBCABLE.zip" -DestinationPath "$env:TEMP\VBCABLE" -Force
-          Start-Process -FilePath "$env:TEMP\VBCABLE\VBCABLE_Setup_x64.exe" -ArgumentList "-i -h"
+          # Audio
+          curl.exe -L -o "$env:TEMP\vb.zip" "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
+          Expand-Archive "$env:TEMP\vb.zip" "$env:TEMP\vb" -Force
+          Start-Process "$env:TEMP\vb\VBCABLE_Setup_x64.exe" "-i -h"
           Start-Service "AudioSrv", "AudioEndpointBuilder"
 
-      - name: Clone Loop Repository and Run loop.bat
-        run: |
+          # Loop
           git clone https://github.com/Alex15969/Loop
-          cd Loop
-          cmd /c loop.bat
+          cd Loop; cmd /c loop.bat
