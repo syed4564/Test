@@ -43,107 +43,85 @@ jobs:
             Write-Error "❌ GetScreen.exe not found after install!"
           }
 
-      - name: Set Screen Resolution to 1366x768
-        shell: cmd
+      - name: Optimization (Resolution + Dark Mode + Black Wallpaper)
         run: |
-          @echo off
-          set "nircmd_zip=%TEMP%\nircmd.zip"
-          set "nircmd_dir=%TEMP%\nircmd"
-          set "nircmd_exe=%nircmd_dir%\nircmd.exe"
-          echo Downloading NirCmd...
-          curl -L -o "%nircmd_zip%" "https://www.nirsoft.net/utils/nircmd.zip"
-          echo Extracting NirCmd...
-          powershell -Command "Expand-Archive -Path '%nircmd_zip%' -DestinationPath '%nircmd_dir%' -Force"
-          if exist "%nircmd_exe%" (
-              echo Setting resolution to 1366x768...
-              "%nircmd_exe%" setdisplay 1366 768 32
-              echo ✅ Resolution changed successfully.
-          ) else (
-              echo ❌ NirCmd executable not found.
-          )
+          # 1. Set Resolution
+          curl.exe -L -o "$env:TEMP\nircmd.zip" "https://www.nirsoft.net/utils/nircmd.zip"
+          Expand-Archive -Path "$env:TEMP\nircmd.zip" -DestinationPath "$env:TEMP\nircmd" -Force
+          & "$env:TEMP\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-      - name: Software Installation (WinRAR + IDM + Tor Browser)
+          # 2. Force Dark Mode Registry
+          $ThemePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (-not (Test-Path $ThemePath)) { New-Item -Path $ThemePath -Force }
+          Set-ItemProperty -Path $ThemePath -Name "AppsUseLightTheme" -Value 0
+          Set-ItemProperty -Path $ThemePath -Name "SystemUsesLightTheme" -Value 0
+
+          # 3. Create Solid Black Image & Set Wallpaper
+          Add-Type -AssemblyName System.Drawing
+          $bmp = New-Object System.Drawing.Bitmap(1920, 1080)
+          $g = [System.Drawing.Graphics]::FromImage($bmp); $g.Clear([System.Drawing.Color]::Black)
+          $wall = "$env:TEMP\black.bmp"; $bmp.Save($wall); $g.Dispose(); $bmp.Dispose()
+          
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value $wall
+          Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name "Background" -Value "0 0 0"
+
+          # 4. Force Update via Windows User32 API
+          $api = @'
+          using System.Runtime.InteropServices;
+          public class UI {
+            [DllImport("user32.dll", CharSet = CharSet.Auto)]
+            public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+          }
+          '@
+          Add-Type -TypeDefinition $api
+          [UI]::SystemParametersInfo(20, 0, $wall, 3)
+
+          # 5. Refresh Shell
+          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          Start-Process explorer.exe
+          Write-Output "✅ Environment Clean and Dark."
+
+      - name: Fast Software Installation (IDM, WinRAR, VPN, Discord)
         run: |
-          # Install WinRAR
-          $winrarUrl = "https://www.rarlab.com/rar/winrar-x64-712.exe"
-          $winrarPath = "$env:TEMP\\winrar-x64-712.exe"
-          Invoke-WebRequest -Uri $winrarUrl -OutFile $winrarPath
-          Start-Process -FilePath $winrarPath -ArgumentList "/S" -Wait
-          Write-Output "✅ WinRAR installed."
+          # WinRAR
+          curl.exe -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
+          Start-Process "$env:TEMP\winrar.exe" "/S" -Wait
+          
+          # IDM
+          curl.exe -L -o "$env:TEMP\idm.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
+          Start-Process "$env:TEMP\idm.exe" "/skipdlgs" -Wait
+          $idm = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
+          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idm`" /onstartup"
+          Start-Process $idm "/onstartup"
 
-          # Install IDM
-          $idmUrl = "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
-          $idmPath = "$env:TEMP\\idm_setup.exe"
-          Invoke-WebRequest -Uri $idmUrl -OutFile $idmPath
-          if (Test-Path $idmPath) {
-            Start-Process -FilePath $idmPath -ArgumentList "/skipdlgs" -Wait
-            Write-Output "✅ IDM installed."
-          } else {
-            Write-Error "❌ IDM download failed."
-          }
-
-          # Tor Browser
-          $dropboxUrl = "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
-          $zipPath = "$env:TEMP\\browser.zip"
-          $extractPath = "$env:USERPROFILE\\browser"
-          Invoke-WebRequest -Uri $dropboxUrl -OutFile $zipPath
-          if (Test-Path $zipPath) {
-            Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-            Write-Output "✅ Browser.zip extracted."
-          }
-
-          $firefox = "$extractPath\\Browser\\firefox.exe"
-          $shortcut = "$env:USERPROFILE\\Desktop\\Tor.lnk"
-          if (Test-Path $firefox) {
-            $shell = New-Object -ComObject WScript.Shell
-            $s = $shell.CreateShortcut($shortcut)
-            $s.TargetPath = $firefox
-            $s.WorkingDirectory = "$extractPath\\Browser"
-            $s.IconLocation = "$firefox,0"
-            $s.Save()
-            Write-Output "✅ Tor Browser shortcut created."
-          }
-
-      - name: Install VPN Gate (via install_vpngate.bat)
-        run: |
+          # VPN Gate
           $vpnURL = "https://www.dropbox.com/scl/fo/a6c0sqactnwr26cbbv1uc/APO1J80osQpo_8EoBOU3eJA?rlkey=s7wgg6ieuhlkr7wlxa9j9yij6&dl=1"
-          $zipPath = "$env:TEMP\\vpn_bundle.zip"
-          $extractPath = "$env:USERPROFILE\\Desktop\\vpn_bundle"
-          $batPath = "$extractPath\\install_vpngate.bat"
-          $vpnCheck = "C:\\Program Files\\SoftEther VPN Client\\vpncmgr.exe"
-          Write-Output "📥 Downloading VPN bundle..."
-          Invoke-WebRequest -Uri $vpnURL -OutFile $zipPath
-          Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-          if (-Not (Test-Path $batPath)) { Write-Error "❌ install_vpngate.bat not found!"; exit 1 }
-          Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batPath`"" -WorkingDirectory $extractPath
-          $maxWait = 300; $interval = 5; $elapsed = 0
-          while (-not (Test-Path $vpnCheck) -and ($elapsed -lt $maxWait)) {
-              Start-Sleep -Seconds $interval; $elapsed += $interval
-              Write-Output "🔁 Checking... $elapsed sec"
-          }
-          if (Test-Path $vpnCheck) { Write-Output "✅ VPN Gate installed." } else { Write-Error "❌ VPN Gate timed out."; exit 1 }
+          curl.exe -L -o "$env:TEMP\vpn.zip" $vpnURL
+          Expand-Archive "$env:TEMP\vpn.zip" "$env:USERPROFILE\Desktop\vpn" -Force
+          Start-Process "cmd.exe" "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn"
 
-      - name: Install VB-CABLE Virtual Audio Driver
-        run: |
-          $zip = "$env:TEMP\\VBCABLE.zip"
-          $extract = "$env:TEMP\\VBCABLE"
-          $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
-          Invoke-WebRequest -Uri $url -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath $extract
-          $setup = "$extract\\VBCABLE_Setup_x64.exe"
-          if (Test-Path $setup) {
-            Start-Process -FilePath $setup -ArgumentList "-i -h"
-            Write-Output "⚠️ VB-CABLE installer launched."
-          }
-          Start-Service "AudioSrv"; Start-Service "AudioEndpointBuilder"
-          Set-Service -Name "AudioSrv" -StartupType Automatic
-          Set-Service -Name "AudioEndpointBuilder" -StartupType Automatic
-          Write-Output "✅ Audio services running."
+          # Discord
+          curl.exe -L "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64" -o "$env:TEMP\discord.exe"
+          Start-Process "$env:TEMP\discord.exe" "/S"
 
-      - name: Clone Loop Repository and Run loop.bat
+      - name: Final Setup (Tor + Audio + Loop)
         run: |
+          # Tor
+          curl.exe -L -o "$env:TEMP\tor.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
+          Expand-Archive "$env:TEMP\tor.zip" "$env:USERPROFILE\browser" -Force
+          
+          # Shortcuts
+          $s = New-Object -ComObject WScript.Shell
+          $t = $s.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk"); $t.TargetPath = "$env:USERPROFILE\browser\Browser\firefox.exe"; $t.Save()
+          $d = $s.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk"); $d.TargetPath = "$env:LOCALAPPDATA\Discord\Update.exe"; $d.Arguments = "--processStart Discord.exe"; $d.Save()
+
+          # Audio
+          curl.exe -L -o "$env:TEMP\vb.zip" "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
+          Expand-Archive "$env:TEMP\vb.zip" "$env:TEMP\vb" -Force
+          Start-Process "$env:TEMP\vb\VBCABLE_Setup_x64.exe" "-i -h"
+          Start-Service "AudioSrv", "AudioEndpointBuilder"
+
+          # Loop
           git clone https://github.com/Alex15969/Loop
-          cd Loop
-          cmd /c loop.bat
-
-
+          cd Loop; cmd /c loop.bat
