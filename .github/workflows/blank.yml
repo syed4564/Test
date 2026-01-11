@@ -33,35 +33,43 @@ jobs:
           powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
           "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-      # ==============================
-      # FORCE CHROME DEFAULT + DARK MODE + BLACK WALLPAPER (ADDED ONLY)
-      # ==============================
       - name: Force Chrome Default + Dark Mode + Black Wallpaper
         run: |
-          # Force Chrome as default browser (Chrome is preinstalled)
+          Write-Output "🌐 Forcing Chrome as default browser..."
           $chrome = "${env:ProgramFiles}\Google\Chrome\Application\chrome.exe"
           if (Test-Path $chrome) {
               Start-Process $chrome "--make-default-browser"
           }
 
-          # Enable Dark Mode (Apps + Taskbar)
-          New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Force | Out-Null
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0
-          Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0
+          # Association Registry tweaks
+          $paths = @("HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice", 
+                     "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice")
+          foreach ($p in $paths) {
+              if (!(Test-Path $p)) { New-Item -Path $p -Force }
+              Set-ItemProperty -Path $p -Name "ProgId" -Value "ChromeHTML" -ErrorAction SilentlyContinue
+          }
 
-          # Create solid black wallpaper
+          Write-Output "🌙 Enabling Dark Mode & Black Wallpaper..."
+          # Dark Mode
+          $pers = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (!(Test-Path $pers)) { New-Item -Path $pers -Force }
+          Set-ItemProperty -Path $pers -Name "AppsUseLightTheme" -Value 0
+          Set-ItemProperty -Path $pers -Name "SystemUsesLightTheme" -Value 0
+
+          # Black Wallpaper (Bitmap Method)
           Add-Type -AssemblyName System.Drawing
           $bmp = New-Object System.Drawing.Bitmap 1920,1080
           $g = [System.Drawing.Graphics]::FromImage($bmp)
           $g.Clear([System.Drawing.Color]::Black)
           $wall = "$env:TEMP\black.bmp"
           $bmp.Save($wall)
-
-          # Apply wallpaper
           Set-ItemProperty "HKCU:\Control Panel\Desktop" Wallpaper $wall
           Set-ItemProperty "HKCU:\Control Panel\Desktop" WallpaperStyle "2"
-          Set-ItemProperty "HKCU:\Control Panel\Desktop" TileWallpaper "0"
-          rundll32.exe user32.dll, UpdatePerUserSystemParameters
+          
+          # Force Refresh UI
+          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          Start-Process explorer.exe
 
       - name: Install WinRAR & IDM
         run: |
@@ -88,23 +96,24 @@ jobs:
       - name: Install Discord (Fast Method)
         run: |
           $url = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
-          $setupPath = "$env:TEMP\DiscordSetup.exe"
-          curl.exe -L $url -o $setupPath
-          Start-Process -FilePath $setupPath -ArgumentList "/S"
+          curl.exe -L $url -o "$env:TEMP\DiscordSetup.exe"
+          Start-Process -FilePath "$env:TEMP\DiscordSetup.exe" -ArgumentList "/S"
 
       - name: Setup Shortcuts & Tor
         run: |
           $shell = New-Object -ComObject WScript.Shell
-          $d = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-          $d.TargetPath = "$env:LOCALAPPDATA\Discord\Update.exe"
-          $d.Arguments = "--processStart Discord.exe"
-          $d.Save()
+          $updateExe = "$env:LOCALAPPDATA\Discord\Update.exe"
+          $dShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
+          $dShortcut.TargetPath = $updateExe
+          $dShortcut.Arguments = "--processStart Discord.exe"
+          $dShortcut.Save()
+
           $torZip = "$env:TEMP\browser.zip"
-          curl.exe -L -o $torZip "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?dl=1"
+          curl.exe -L -o $torZip "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
           Expand-Archive -Path $torZip -DestinationPath "$env:USERPROFILE\browser" -Force
-          $t = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
-          $t.TargetPath = "$env:USERPROFILE\browser\Browser\firefox.exe"
-          $t.Save()
+          $tShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
+          $tShortcut.TargetPath = "$env:USERPROFILE\browser\Browser\firefox.exe"
+          $tShortcut.Save()
 
       - name: Install VB-CABLE Audio
         run: |
