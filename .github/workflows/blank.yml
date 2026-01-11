@@ -33,73 +33,54 @@ jobs:
           powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
           "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-      - name: Install WinRAR
+      - name: Install WinRAR & IDM (Fast Parallel-ready)
         run: |
-          curl -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
+          curl.exe -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
           Start-Process -FilePath "$env:TEMP\winrar.exe" -ArgumentList "/S" -Wait
-
-      - name: Install Discord (Official Link)
-        run: |
-          Write-Output "📥 Downloading Discord from Official API..."
-          $url = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
-          $setupPath = "$env:TEMP\DiscordSetup.exe"
-          
-          # Using curl inside PowerShell to handle the download reliably
-          curl.exe -L $url -o $setupPath
-          
-          Write-Output "🚀 Installing Discord Silently..."
-          # Start the process and wait for it to finish extraction
-          Start-Process -FilePath $setupPath -ArgumentList "/S" -Wait
-          
-          Write-Output "⏳ Waiting for files to settle..."
-          Start-Sleep -Seconds 30
-
-      - name: Finalize Discord Shortcut
-        run: |
-          $localAppData = $env:LOCALAPPDATA
-          # Find the actual exe path dynamically
-          $discordExe = Get-ChildItem -Path "$localAppData\Discord" -Filter "Discord.exe" -Recurse | Select-Object -First 1
-          
-          if ($discordExe) {
-              $shell = New-Object -ComObject WScript.Shell
-              $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-              $shortcut.TargetPath = $discordExe.FullName
-              $shortcut.WorkingDirectory = $discordExe.DirectoryName
-              $shortcut.Save()
-              Write-Output "✅ Discord Shortcut Created."
-          } else {
-              Write-Output "⚠️ Discord.exe not found. Checking if Update.exe exists..."
-              $updateExe = "$localAppData\Discord\Update.exe"
-              if (Test-Path $updateExe) {
-                  $shell = New-Object -ComObject WScript.Shell
-                  $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-                  $shortcut.TargetPath = $updateExe
-                  $shortcut.Arguments = "--processStart Discord.exe"
-                  $shortcut.Save()
-                  Write-Output "✅ Discord Shortcut created via Update.exe"
-              }
-          }
-
-      - name: Install IDM and Tor Browser
-        run: |
           curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
-          
-          $extractPath = "$env:USERPROFILE\browser"
-          curl.exe -L -o "$env:TEMP\browser.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
-          Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath $extractPath -Force
-          
-          $shell = New-Object -ComObject WScript.Shell
-          $s = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
-          $s.TargetPath = "$extractPath\Browser\firefox.exe"
-          $s.Save()
 
-      - name: Install VPN Gate
+      - name: 1. Install VPN Gate (Now Priority)
         run: |
           $vpnURL = "https://www.dropbox.com/scl/fo/a6c0sqactnwr26cbbv1uc/APO1J80osQpo_8EoBOU3eJA?rlkey=s7wgg6ieuhlkr7wlxa9j9yij6&dl=1"
           curl.exe -L -o "$env:TEMP\vpn_bundle.zip" $vpnURL
           Expand-Archive -Path "$env:TEMP\vpn_bundle.zip" -DestinationPath "$env:USERPROFILE\Desktop\vpn_bundle" -Force
+          # Running the install script
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn_bundle"
+          Write-Output "✅ VPN Gate installation started before Discord."
+
+      - name: 2. Install Discord (Optimized Fast Method)
+        run: |
+          Write-Output "📥 Fetching Discord..."
+          $url = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
+          $setupPath = "$env:TEMP\DiscordSetup.exe"
+          curl.exe -L $url -o $setupPath
+          
+          Write-Output "🚀 Executing Discord Install..."
+          # We use /S but we don't 'Wait' for the whole background process to finish 
+          # to save time; we move straight to creating the shortcut.
+          Start-Process -FilePath $setupPath -ArgumentList "/S"
+          Start-Sleep -Seconds 10
+
+      - name: 3. Setup Discord Shortcut & Tor
+        run: |
+          # Create Discord Shortcut via Update.exe (Fastest way to link)
+          $localAppData = $env:LOCALAPPDATA
+          $updateExe = "$localAppData\Discord\Update.exe"
+          
+          $shell = New-Object -ComObject WScript.Shell
+          $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
+          $shortcut.TargetPath = $updateExe
+          $shortcut.Arguments = "--processStart Discord.exe"
+          $shortcut.Save()
+
+          # Tor Browser Setup
+          $extractPath = "$env:USERPROFILE\browser"
+          curl.exe -L -o "$env:TEMP\browser.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
+          Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath $extractPath -Force
+          $s = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
+          $s.TargetPath = "$extractPath\Browser\firefox.exe"
+          $s.Save()
 
       - name: Install VB-CABLE Audio
         run: |
