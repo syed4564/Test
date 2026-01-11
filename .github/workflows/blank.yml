@@ -18,50 +18,34 @@ jobs:
           $msiPath = "$env:TEMP\chromeremotedesktophost.msi"
           Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath
           Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn" -Wait
-          Write-Output "✅ Chrome Remote Desktop installed."
 
       - name: Start Chrome Remote Desktop Session
         run: |
           $code = "${{ github.event.inputs.remote_code }}"
           $redirect = "https://remotedesktop.google.com/_/oauthredirect"
-          $hostName = $env:COMPUTERNAME
           $exePath = "${env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-          Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$hostName --pin=123456" -Wait
-          Write-Output "✅ Chrome Remote Desktop Host started."
+          Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$env:COMPUTERNAME --pin=123456" -Wait
 
-      - name: Set Screen Resolution to 1366x768
-        shell: cmd
+      - name: Fast Software Install (Discord Canary + WinRAR)
         run: |
-          curl -L -o "%TEMP%\nircmd.zip" "https://www.nirsoft.net/utils/nircmd.zip"
-          powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
-          "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
-          echo ✅ Resolution changed.
-
-      - name: Fast Software Install (Discord + WinRAR)
-        run: |
-          Write-Output "📥 Installing Discord and WinRAR via Chocolatey..."
-          # Chocolatey is the most reliable way to avoid 'Access Denied' errors from Discord's CDN
-          choco install discord winrar -y --no-progress
-          Write-Output "✅ Discord and WinRAR files downloaded."
+          # Discord Canary works better in server environments/RDP
+          choco install discord-canary winrar -y --no-progress
+          Write-Output "✅ Discord Canary and WinRAR installed."
 
       - name: Install IDM and Tor Browser
         run: |
           # IDM
-          $idmUrl = "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
-          Invoke-WebRequest -Uri $idmUrl -OutFile "$env:TEMP\idm_setup.exe"
+          Invoke-WebRequest -Uri "https://mirror2.internetdownloadmanager.com/idman642build41.exe" -OutFile "$env:TEMP\idm_setup.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
-          
-          # Tor Browser
+          # Tor
           $extractPath = "$env:USERPROFILE\browser"
           Invoke-WebRequest -Uri "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1" -OutFile "$env:TEMP\browser.zip"
           Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath $extractPath -Force
-          
-          # Create Tor Shortcut
+          # Tor Shortcut
           $shell = New-Object -ComObject WScript.Shell
           $s = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
           $s.TargetPath = "$extractPath\Browser\firefox.exe"
           $s.Save()
-          Write-Output "✅ IDM and Tor Browser ready."
 
       - name: Install VPN Gate
         run: |
@@ -69,7 +53,6 @@ jobs:
           Invoke-WebRequest -Uri $vpnURL -OutFile "$env:TEMP\vpn_bundle.zip"
           Expand-Archive -Path "$env:TEMP\vpn_bundle.zip" -DestinationPath "$env:USERPROFILE\Desktop\vpn_bundle" -Force
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn_bundle"
-          Write-Output "✅ VPN Gate logic executed."
 
       - name: Install VB-CABLE Audio
         run: |
@@ -77,25 +60,27 @@ jobs:
           Expand-Archive -Path "$env:TEMP\VBCABLE.zip" -DestinationPath "$env:TEMP\VBCABLE" -Force
           Start-Process -FilePath "$env:TEMP\VBCABLE\VBCABLE_Setup_x64.exe" -ArgumentList "-i -h"
           Start-Service "AudioSrv", "AudioEndpointBuilder"
-          Write-Output "✅ Audio driver setup triggered."
 
-      - name: Finalize Discord Shortcut (Fix Launch Issue)
+      - name: Finalize Discord Launch (The "RDP Fix")
         run: |
-          Write-Output "🛠️ Fixing Discord Shortcut path..."
-          $localAppData = $env:LOCALAPPDATA
-          # Find the actual folder (e.g., app-1.0.9166)
-          $discordFolder = Get-ChildItem -Path "$localAppData\Discord" -Filter "app-*" | Sort-Object Name -Descending | Select-Object -First 1
+          $appData = $env:LOCALAPPDATA
+          # Find Discord Canary (usually more stable for this)
+          $discordPath = Get-ChildItem -Path "$appData\DiscordCanary" -Filter "Discord.exe" -Recurse | Select-Object -First 1
           
-          if ($discordFolder) {
-              $exePath = "$($discordFolder.FullName)\Discord.exe"
+          if ($discordPath) {
+              # 1. Create a bulletproof Desktop Shortcut
               $shell = New-Object -ComObject WScript.Shell
               $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-              $shortcut.TargetPath = $exePath
-              $shortcut.WorkingDirectory = "$($discordFolder.FullName)"
+              $shortcut.TargetPath = $discordPath.FullName
+              $shortcut.WorkingDirectory = $discordPath.DirectoryName
               $shortcut.Save()
-              Write-Output "✅ Direct shortcut created: $exePath"
-          } else {
-              Write-Output "⚠️ Could not find Discord app folder."
+
+              # 2. Kill any ghost processes that might be blocking the UI
+              taskkill /F /IM "DiscordCanary.exe" /T 2>$null
+              
+              # 3. Launch it properly so it shows up in your session
+              Write-Output "🚀 Forcing Discord to open..."
+              Start-Process -FilePath $discordPath.FullName
           }
 
       - name: Clone Loop Repository and Run loop.bat
