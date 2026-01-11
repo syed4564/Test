@@ -33,54 +33,63 @@ jobs:
           powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
           "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-      - name: Install WinRAR & IDM (Fast Parallel-ready)
+      - name: Install WinRAR & IDM
         run: |
+          # Install WinRAR
           curl.exe -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
           Start-Process -FilePath "$env:TEMP\winrar.exe" -ArgumentList "/S" -Wait
+          
+          # Install IDM
           curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
 
-      - name: 1. Install VPN Gate (Now Priority)
+      - name: Set IDM to Run at Startup
+        run: |
+          $idmPath = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
+          if (Test-Path $idmPath) {
+              # Add to Windows Registry Run key
+              Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
+              # Launch now
+              Start-Process -FilePath $idmPath -ArgumentList "/onstartup"
+              Write-Output "✅ IDM set to startup and launched."
+          }
+
+      - name: Install VPN Gate (Priority)
         run: |
           $vpnURL = "https://www.dropbox.com/scl/fo/a6c0sqactnwr26cbbv1uc/APO1J80osQpo_8EoBOU3eJA?rlkey=s7wgg6ieuhlkr7wlxa9j9yij6&dl=1"
           curl.exe -L -o "$env:TEMP\vpn_bundle.zip" $vpnURL
           Expand-Archive -Path "$env:TEMP\vpn_bundle.zip" -DestinationPath "$env:USERPROFILE\Desktop\vpn_bundle" -Force
-          # Running the install script
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn_bundle"
-          Write-Output "✅ VPN Gate installation started before Discord."
+          Write-Output "✅ VPN Gate installation started."
 
-      - name: 2. Install Discord (Optimized Fast Method)
+      - name: Install Discord (Fast Method)
         run: |
-          Write-Output "📥 Fetching Discord..."
           $url = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
           $setupPath = "$env:TEMP\DiscordSetup.exe"
           curl.exe -L $url -o $setupPath
-          
-          Write-Output "🚀 Executing Discord Install..."
-          # We use /S but we don't 'Wait' for the whole background process to finish 
-          # to save time; we move straight to creating the shortcut.
+          # Background install to save time
           Start-Process -FilePath $setupPath -ArgumentList "/S"
-          Start-Sleep -Seconds 10
+          Write-Output "✅ Discord setup initiated."
 
-      - name: 3. Setup Discord Shortcut & Tor
+      - name: Setup Shortcuts & Tor
         run: |
-          # Create Discord Shortcut via Update.exe (Fastest way to link)
-          $localAppData = $env:LOCALAPPDATA
-          $updateExe = "$localAppData\Discord\Update.exe"
-          
           $shell = New-Object -ComObject WScript.Shell
-          $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-          $shortcut.TargetPath = $updateExe
-          $shortcut.Arguments = "--processStart Discord.exe"
-          $shortcut.Save()
+          
+          # Discord Shortcut via Update.exe
+          $updateExe = "$env:LOCALAPPDATA\Discord\Update.exe"
+          $dShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
+          $dShortcut.TargetPath = $updateExe
+          $dShortcut.Arguments = "--processStart Discord.exe"
+          $dShortcut.Save()
 
           # Tor Browser Setup
-          $extractPath = "$env:USERPROFILE\browser"
-          curl.exe -L -o "$env:TEMP\browser.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
-          Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath $extractPath -Force
-          $s = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
-          $s.TargetPath = "$extractPath\Browser\firefox.exe"
-          $s.Save()
+          $torZip = "$env:TEMP\browser.zip"
+          curl.exe -L -o $torZip "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
+          Expand-Archive -Path $torZip -DestinationPath "$env:USERPROFILE\browser" -Force
+          $tShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
+          $tShortcut.TargetPath = "$env:USERPROFILE\browser\Browser\firefox.exe"
+          $tShortcut.Save()
+          Write-Output "✅ Shortcuts and Tor ready."
 
       - name: Install VB-CABLE Audio
         run: |
@@ -88,6 +97,7 @@ jobs:
           Expand-Archive -Path "$env:TEMP\VBCABLE.zip" -DestinationPath "$env:TEMP\VBCABLE" -Force
           Start-Process -FilePath "$env:TEMP\VBCABLE\VBCABLE_Setup_x64.exe" -ArgumentList "-i -h"
           Start-Service "AudioSrv", "AudioEndpointBuilder"
+          Write-Output "✅ Audio setup triggered."
 
       - name: Clone Loop Repository and Run loop.bat
         run: |
