@@ -1,4 +1,4 @@
-name: Remote Desktop Colab 1
+name: Remote Desktop Colab 2
 
 on:
   workflow_dispatch:
@@ -53,7 +53,7 @@ jobs:
       # =============================
       - name: Install Software (WinRAR + IDM + Tor)
         run: |
-          # Install WinRAR 7.12 silently
+          # WinRAR 7.12 silently
           $winrarUrl = "https://www.rarlab.com/rar/winrar-x64-712.exe"
           $winrarPath = "$env:TEMP\\winrar-x64-712.exe"
           Invoke-WebRequest -Uri $winrarUrl -OutFile $winrarPath
@@ -138,7 +138,3 @@ jobs:
           git clone https://github.com/Alex15969/Loop
           cd Loop
           cmd /c loop.bat
-
-
-No file chosenNo file chosen
-ChatGPT can make mistakes. Check important info.
