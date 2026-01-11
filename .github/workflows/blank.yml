@@ -33,28 +33,31 @@ jobs:
           powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
           "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-      - name: Windows Personalization (Dark Theme + Spotlight)
+      - name: Personalization (Dark Mode + Solid Black Wallpaper)
         run: |
-          # Dark Mode Fix
+          # 1. Force Dark Mode for System and Apps
           $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
           if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force }
-          Set-ItemProperty -Path $regPath -Name "SystemUsesLightTheme" -Value 0 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $regPath -Name "AppsUseLightTheme" -Value 0 -ErrorAction SilentlyContinue
-          
-          # Spotlight Fix
-          $wallPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers"
-          if (-not (Test-Path $wallPath)) { New-Item -Path $wallPath -Force }
-          Set-ItemProperty -Path $wallPath -Name "BackgroundType" -Value 2 -ErrorAction SilentlyContinue
-          Write-Output "✅ Appearance set to Dark/Spotlight."
+          Set-ItemProperty -Path $regPath -Name "SystemUsesLightTheme" -Value 0
+          Set-ItemProperty -Path $regPath -Name "AppsUseLightTheme" -Value 0
 
-      - name: Set Chrome as Default (Safe Method)
+          # 2. Set Wallpaper to Solid Black (Removes Spotlight/Images)
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
+          Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name "Background" -Value "0 0 0"
+          # Refresh the desktop to apply changes
+          rundll32.exe user32.dll,UpdatePerUserSystemParameters
+          Write-Output "✅ Dark Mode enabled and Wallpaper set to Black."
+
+      - name: Set Chrome as Default (Priority Fix)
         run: |
-          # Use the official App Association command instead of direct registry editing to avoid 'Access Denied'
-          $chromePath = "${env:ProgramFiles}\Google\Chrome\Application\chrome.exe"
-          if (Test-Path $chromePath) {
-              # This triggers the system to register Chrome as the primary handler
-              Start-Process "$chromePath" -ArgumentList "--make-default-browser"
-              Write-Output "✅ Chrome signaled as default browser."
+          # Download a small utility that bypasses 'Access Denied' for default browsers
+          curl.exe -L -o "$env:TEMP\SetDefaultBrowser.zip" "https://github.com/sampalmer/set-default-browser/releases/download/v1.4.0/set-default-browser.zip"
+          Expand-Archive -Path "$env:TEMP\SetDefaultBrowser.zip" -DestinationPath "$env:TEMP\sdb" -Force
+          
+          # Use the utility to set Chrome as default for all protocols
+          if (Test-Path "$env:TEMP\sdb\SetDefaultBrowser.exe") {
+              Start-Process "$env:TEMP\sdb\SetDefaultBrowser.exe" -ArgumentList "chrome" -Wait
+              Write-Output "✅ Chrome set as default browser successfully."
           }
 
       - name: Install WinRAR & IDM
@@ -65,11 +68,11 @@ jobs:
           curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
           
+          # IDM Startup configuration
           $idmPath = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
           if (Test-Path $idmPath) {
               Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
               Start-Process -FilePath $idmPath -ArgumentList "/onstartup"
-              Write-Output "✅ IDM Startup Configured."
           }
 
       - name: Install VPN Gate (Priority)
