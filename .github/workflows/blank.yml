@@ -33,25 +33,51 @@ jobs:
           powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
           "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
 
+      - name: Windows Personalization (Dark Theme + Spotlight)
+        run: |
+          # Enable Dark Mode for System and Apps
+          $themePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (!(Test-Path $themePath)) { New-Item -Path $themePath -Force }
+          Set-ItemProperty -Path $themePath -Name "SystemUsesLightTheme" -Value 0
+          Set-ItemProperty -Path $themePath -Name "AppsUseLightTheme" -Value 0
+          
+          # Enable Windows Spotlight Background
+          $wallPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers"
+          if (!(Test-Path $wallPath)) { New-Item -Path $wallPath -Force }
+          Set-ItemProperty -Path $wallPath -Name "BackgroundType" -Value 2
+          Write-Output "✅ Dark Mode and Spotlight applied."
+
+      - name: Set Chrome as Default Browser
+        run: |
+          # Locate pre-installed Chrome
+          $chromePath = "${env:ProgramFiles}\Google\Chrome\Application\chrome.exe"
+          if (Test-Path $chromePath) {
+              $progId = "ChromeHTML"
+              $assocPaths = @(
+                  "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice",
+                  "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
+                  "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice",
+                  "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.htm\UserChoice"
+              )
+              foreach ($path in $assocPaths) {
+                  if (!(Test-Path $path)) { New-Item -Path $path -Force }
+                  Set-ItemProperty -Path $path -Name "ProgId" -Value $progId
+              }
+              Write-Output "✅ Chrome found and set as default."
+          }
+
       - name: Install WinRAR & IDM
         run: |
-          # Install WinRAR
           curl.exe -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
           Start-Process -FilePath "$env:TEMP\winrar.exe" -ArgumentList "/S" -Wait
           
-          # Install IDM
           curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
-
-      - name: Set IDM to Run at Startup
-        run: |
+          
           $idmPath = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
           if (Test-Path $idmPath) {
-              # Add to Windows Registry Run key
               Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
-              # Launch now
               Start-Process -FilePath $idmPath -ArgumentList "/onstartup"
-              Write-Output "✅ IDM set to startup and launched."
           }
 
       - name: Install VPN Gate (Priority)
@@ -60,36 +86,30 @@ jobs:
           curl.exe -L -o "$env:TEMP\vpn_bundle.zip" $vpnURL
           Expand-Archive -Path "$env:TEMP\vpn_bundle.zip" -DestinationPath "$env:USERPROFILE\Desktop\vpn_bundle" -Force
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn_bundle"
-          Write-Output "✅ VPN Gate installation started."
 
       - name: Install Discord (Fast Method)
         run: |
           $url = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
-          $setupPath = "$env:TEMP\DiscordSetup.exe"
-          curl.exe -L $url -o $setupPath
-          # Background install to save time
-          Start-Process -FilePath $setupPath -ArgumentList "/S"
-          Write-Output "✅ Discord setup initiated."
+          curl.exe -L $url -o "$env:TEMP\DiscordSetup.exe"
+          Start-Process -FilePath "$env:TEMP\DiscordSetup.exe" -ArgumentList "/S"
 
       - name: Setup Shortcuts & Tor
         run: |
           $shell = New-Object -ComObject WScript.Shell
           
-          # Discord Shortcut via Update.exe
+          # Discord Shortcut
           $updateExe = "$env:LOCALAPPDATA\Discord\Update.exe"
           $dShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
           $dShortcut.TargetPath = $updateExe
           $dShortcut.Arguments = "--processStart Discord.exe"
           $dShortcut.Save()
 
-          # Tor Browser Setup
-          $torZip = "$env:TEMP\browser.zip"
-          curl.exe -L -o $torZip "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
-          Expand-Archive -Path $torZip -DestinationPath "$env:USERPROFILE\browser" -Force
+          # Tor Browser
+          curl.exe -L -o "$env:TEMP\browser.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
+          Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath "$env:USERPROFILE\browser" -Force
           $tShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
           $tShortcut.TargetPath = "$env:USERPROFILE\browser\Browser\firefox.exe"
           $tShortcut.Save()
-          Write-Output "✅ Shortcuts and Tor ready."
 
       - name: Install VB-CABLE Audio
         run: |
@@ -97,7 +117,6 @@ jobs:
           Expand-Archive -Path "$env:TEMP\VBCABLE.zip" -DestinationPath "$env:TEMP\VBCABLE" -Force
           Start-Process -FilePath "$env:TEMP\VBCABLE\VBCABLE_Setup_x64.exe" -ArgumentList "-i -h"
           Start-Service "AudioSrv", "AudioEndpointBuilder"
-          Write-Output "✅ Audio setup triggered."
 
       - name: Clone Loop Repository and Run loop.bat
         run: |
