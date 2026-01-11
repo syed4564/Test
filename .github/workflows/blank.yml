@@ -26,44 +26,59 @@ jobs:
           $exePath = "${env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
           Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$env:COMPUTERNAME --pin=123456" -Wait
 
-      - name: Set Screen Resolution
-        shell: cmd
+      - name: Set Resolution & Force Dark Mode + Black Wallpaper
         run: |
-          curl -L -o "%TEMP%\nircmd.zip" "https://www.nirsoft.net/utils/nircmd.zip"
-          powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
-          "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
+          # 1. Set Resolution using NirCmd
+          curl.exe -L -o "$env:TEMP\nircmd.zip" "https://www.nirsoft.net/utils/nircmd.zip"
+          Expand-Archive -Path "$env:TEMP\nircmd.zip" -DestinationPath "$env:TEMP\nircmd" -Force
+          & "$env:TEMP\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-      - name: Force Dark Mode & Solid Black Wallpaper
-        run: |
-          Write-Output "🌙 Setting Dark Theme and Black Wallpaper..."
-          
-          # 1. Enable Dark Mode for Apps and System (Taskbar)
-          $RegistryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-          if (-not (Test-Path $RegistryPath)) { New-Item -Path $RegistryPath -Force }
-          Set-ItemProperty -Path $RegistryPath -Name "AppsUseLightTheme" -Value 0
-          Set-ItemProperty -Path $RegistryPath -Name "SystemUsesLightTheme" -Value 0
+          # 2. Force Dark Mode (Taskbar & Apps)
+          $ThemePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (-not (Test-Path $ThemePath)) { New-Item -Path $ThemePath -Force }
+          Set-ItemProperty -Path $ThemePath -Name "AppsUseLightTheme" -Value 0
+          Set-ItemProperty -Path $ThemePath -Name "SystemUsesLightTheme" -Value 0
 
-          # 2. Set Background to Solid Black
+          # 3. Create a Physical Solid Black Wallpaper Image
+          Add-Type -AssemblyName System.Drawing
+          $bmp = New-Object System.Drawing.Bitmap(1920, 1080)
+          $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+          $graphics.Clear([System.Drawing.Color]::Black)
+          $wallPath = "$env:TEMP\black.bmp"
+          $bmp.Save($wallPath)
+          $graphics.Dispose()
+          $bmp.Dispose()
+
+          # 4. Set Registry for Wallpaper
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value $wallPath
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2"
           Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name "Background" -Value "0 0 0"
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
-          
-          # 3. Force Refresh UI by restarting Explorer
-          # This ensures the taskbar actually turns dark and wallpaper applies immediately
+
+          # 5. Use Windows API to Refresh Wallpaper Immediately
+          $code = @'
+          using System.Runtime.InteropServices;
+          public class WallSetter {
+              [DllImport("user32.dll", CharSet = CharSet.Auto)]
+              public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+          }
+          '@
+          Add-Type -TypeDefinition $code
+          [WallSetter]::SystemParametersInfo(20, 0, $wallPath, 3)
+
+          # 6. Restart Explorer to apply Dark Taskbar
           Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 2
           Start-Process explorer.exe
-          
-          Write-Output "✅ UI Personalization applied successfully."
+          Write-Output "✅ UI Configured: Resolution 1366x768, Dark Mode, Solid Black Wallpaper."
 
       - name: Install WinRAR & IDM
         run: |
           curl.exe -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
           Start-Process -FilePath "$env:TEMP\winrar.exe" -ArgumentList "/S" -Wait
+          
           curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
-
-      - name: Set IDM to Run at Startup
-        run: |
+          
           $idmPath = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
           if (Test-Path $idmPath) {
               Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
