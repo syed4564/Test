@@ -1,4 +1,4 @@
-name: Remote Desktop Colab
+name: Remote Desktop Colab 1
 
 on:
   workflow_dispatch:
@@ -15,6 +15,7 @@ jobs:
 
     steps:
       - name: Install Chrome Remote Desktop Host
+        shell: powershell
         run: |
           $msiUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
           $msiPath = "$env:TEMP\chromeremotedesktophost.msi"
@@ -23,6 +24,7 @@ jobs:
           Write-Output "✅ Chrome Remote Desktop installed."
 
       - name: Start Chrome Remote Desktop Session
+        shell: powershell
         run: |
           $code = "${{ github.event.inputs.remote_code }}"
           $redirect = "https://remotedesktop.google.com/_/oauthredirect"
@@ -42,67 +44,94 @@ jobs:
           set "nircmd_zip=%TEMP%\nircmd.zip"
           set "nircmd_dir=%TEMP%\nircmd"
           set "nircmd_exe=%nircmd_dir%\nircmd.exe"
+
           curl -L -o "%nircmd_zip%" "https://www.nirsoft.net/utils/nircmd.zip"
           powershell -Command "Expand-Archive -Path '%nircmd_zip%' -DestinationPath '%nircmd_dir%' -Force"
-          "%nircmd_exe%" setdisplay 1366 768 32
+
+          if exist "%nircmd_exe%" (
+            "%nircmd_exe%" setdisplay 1366 768 32
+            echo ✅ Resolution set
+          )
 
       - name: Software Installation (WinRAR + IDM + Tor + Discord)
+        shell: powershell
         run: |
-          # WinRAR
+          # =======================
+          # WinRAR (FIXED – no crash)
+          # =======================
           $winrarUrl = "https://www.rarlab.com/rar/winrar-x64-712.exe"
           $winrarPath = "$env:TEMP\winrar.exe"
-          Invoke-WebRequest $winrarUrl -OutFile $winrarPath
-          Start-Process $winrarPath "/S" -Wait
+          Invoke-WebRequest -Uri $winrarUrl -OutFile $winrarPath
+          Start-Process $winrarPath -ArgumentList "/S" -NoNewWindow
+          Write-Output "✅ WinRAR install command executed."
 
+          # =======================
           # IDM
+          # =======================
           $idmUrl = "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           $idmPath = "$env:TEMP\idm.exe"
-          Invoke-WebRequest $idmUrl -OutFile $idmPath
-          Start-Process $idmPath "/skipdlgs" -Wait
+          Invoke-WebRequest -Uri $idmUrl -OutFile $idmPath
+          Start-Process $idmPath -ArgumentList "/skipdlgs" -NoNewWindow
+          Write-Output "✅ IDM install command executed."
 
+          # =======================
+          # Discord
+          # =======================
+          $discordUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
+          $discordPath = "$env:TEMP\DiscordSetup.exe"
+          Invoke-WebRequest -Uri $discordUrl -OutFile $discordPath
+          Start-Process $discordPath -ArgumentList "/S" -NoNewWindow
+          Write-Output "✅ Discord install command executed."
+
+          # =======================
           # Tor Browser
+          # =======================
           $zipUrl = "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?dl=1"
-          $zipPath = "$env:TEMP\browser.zip"
+          $zipPath = "$env:TEMP\tor.zip"
           $extractPath = "$env:USERPROFILE\browser"
-          Invoke-WebRequest $zipUrl -OutFile $zipPath
-          Expand-Archive $zipPath $extractPath -Force
 
-          # Tor shortcut
+          Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+
           $firefox = "$extractPath\Browser\firefox.exe"
           $shortcut = "$env:USERPROFILE\Desktop\Tor.lnk"
-          $shell = New-Object -ComObject WScript.Shell
-          $s = $shell.CreateShortcut($shortcut)
-          $s.TargetPath = $firefox
-          $s.Save()
 
-          # =========================
-          # DISCORD INSTALLATION
-          # =========================
-          $discordUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
-          $discordExe = "$env:TEMP\DiscordSetup.exe"
-          Invoke-WebRequest -Uri $discordUrl -OutFile $discordExe
-          Start-Process $discordExe "/S" -Wait
-          Write-Output "✅ Discord installed."
+          if (Test-Path $firefox) {
+            $w = New-Object -ComObject WScript.Shell
+            $s = $w.CreateShortcut($shortcut)
+            $s.TargetPath = $firefox
+            $s.WorkingDirectory = "$extractPath\Browser"
+            $s.Save()
+          }
 
       - name: Install VPN Gate
+        shell: powershell
         run: |
           $vpnURL = "https://www.dropbox.com/scl/fo/a6c0sqactnwr26cbbv1uc/APO1J80osQpo_8EoBOU3eJA?dl=1"
           $zipPath = "$env:TEMP\vpn.zip"
-          $extractPath = "$env:USERPROFILE\Desktop\vpn"
-          Invoke-WebRequest $vpnURL -OutFile $zipPath
-          Expand-Archive $zipPath $extractPath -Force
-          Start-Process "cmd.exe" "/c `"$extractPath\install_vpngate.bat`""
+          $dest = "$env:USERPROFILE\Desktop\vpn"
+
+          Invoke-WebRequest -Uri $vpnURL -OutFile $zipPath
+          Expand-Archive -Path $zipPath -DestinationPath $dest -Force
+          Start-Process "cmd.exe" "/c `"$dest\install_vpngate.bat`"" -NoNewWindow
 
       - name: Install VB-CABLE Audio
+        shell: powershell
         run: |
-          $zip = "$env:TEMP\VBCABLE.zip"
           $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
-          Invoke-WebRequest $url -OutFile $zip
-          Expand-Archive $zip "$env:TEMP\VBCABLE" -Force
-          Start-Process "$env:TEMP\VBCABLE\VBCABLE_Setup_x64.exe" "-i -h"
+          $zip = "$env:TEMP\vbcable.zip"
+          $out = "$env:TEMP\vbcable"
 
-      - name: Keep Session Alive
+          Invoke-WebRequest $url -OutFile $zip
+          Expand-Archive $zip $out -Force
+          Start-Process "$out\VBCABLE_Setup_x64.exe" "-i -h" -NoNewWindow
+
+          Start-Service AudioSrv
+          Start-Service AudioEndpointBuilder
+
+      - name: Clone Loop Repository and Run loop.bat
+        shell: cmd
         run: |
           git clone https://github.com/Alex15969/Loop
           cd Loop
-          cmd /c loop.bat
+          loop.bat
