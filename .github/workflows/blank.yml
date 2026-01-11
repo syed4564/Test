@@ -48,17 +48,6 @@ jobs:
           rundll32.exe user32.dll,UpdatePerUserSystemParameters
           Write-Output "✅ Dark Mode enabled and Wallpaper set to Black."
 
-      - name: Set Chrome as Default (Priority Fix)
-        run: |
-          # Download a small utility that bypasses 'Access Denied' for default browsers
-          curl.exe -L -o "$env:TEMP\SetDefaultBrowser.zip" "https://github.com/sampalmer/set-default-browser/releases/download/v1.4.0/set-default-browser.zip"
-          Expand-Archive -Path "$env:TEMP\SetDefaultBrowser.zip" -DestinationPath "$env:TEMP\sdb" -Force
-          
-          # Use the utility to set Chrome as default for all protocols
-          if (Test-Path "$env:TEMP\sdb\SetDefaultBrowser.exe") {
-              Start-Process "$env:TEMP\sdb\SetDefaultBrowser.exe" -ArgumentList "chrome" -Wait
-              Write-Output "✅ Chrome set as default browser successfully."
-          }
 
       - name: Install WinRAR & IDM
         run: |
