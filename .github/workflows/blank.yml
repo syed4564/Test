@@ -38,23 +38,26 @@ jobs:
           curl -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
           Start-Process -FilePath "$env:TEMP\winrar.exe" -ArgumentList "/S" -Wait
 
-      - name: Install Discord (Official Link Fix)
-        shell: cmd
+      - name: Install Discord (Official Link)
         run: |
-          echo 📥 Downloading Discord from Official API...
-          :: Using curl -L to follow redirects and -H to mimic a browser
-          curl -L "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64" -o "%TEMP%\DiscordSetup.exe"
+          Write-Output "📥 Downloading Discord from Official API..."
+          $url = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
+          $setupPath = "$env:TEMP\DiscordSetup.exe"
           
-          echo 🚀 Installing Discord Silently...
-          start /wait "" "%TEMP%\DiscordSetup.exe" /S
+          # Using curl inside PowerShell to handle the download reliably
+          curl.exe -L $url -o $setupPath
           
-          :: Wait for the background extractor to finish
-          timeout /t 30 /nobreak
+          Write-Output "🚀 Installing Discord Silently..."
+          # Start the process and wait for it to finish extraction
+          Start-Process -FilePath $setupPath -ArgumentList "/S" -Wait
+          
+          Write-Output "⏳ Waiting for files to settle..."
+          Start-Sleep -Seconds 30
 
       - name: Finalize Discord Shortcut
         run: |
           $localAppData = $env:LOCALAPPDATA
-          # Look for Discord.exe in the install path
+          # Find the actual exe path dynamically
           $discordExe = Get-ChildItem -Path "$localAppData\Discord" -Filter "Discord.exe" -Recurse | Select-Object -First 1
           
           if ($discordExe) {
@@ -64,15 +67,26 @@ jobs:
               $shortcut.WorkingDirectory = $discordExe.DirectoryName
               $shortcut.Save()
               Write-Output "✅ Discord Shortcut Created."
+          } else {
+              Write-Output "⚠️ Discord.exe not found. Checking if Update.exe exists..."
+              $updateExe = "$localAppData\Discord\Update.exe"
+              if (Test-Path $updateExe) {
+                  $shell = New-Object -ComObject WScript.Shell
+                  $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
+                  $shortcut.TargetPath = $updateExe
+                  $shortcut.Arguments = "--processStart Discord.exe"
+                  $shortcut.Save()
+                  Write-Output "✅ Discord Shortcut created via Update.exe"
+              }
           }
 
       - name: Install IDM and Tor Browser
         run: |
-          curl -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
+          curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
           
           $extractPath = "$env:USERPROFILE\browser"
-          curl -L -o "$env:TEMP\browser.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
+          curl.exe -L -o "$env:TEMP\browser.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
           Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath $extractPath -Force
           
           $shell = New-Object -ComObject WScript.Shell
@@ -83,13 +97,13 @@ jobs:
       - name: Install VPN Gate
         run: |
           $vpnURL = "https://www.dropbox.com/scl/fo/a6c0sqactnwr26cbbv1uc/APO1J80osQpo_8EoBOU3eJA?rlkey=s7wgg6ieuhlkr7wlxa9j9yij6&dl=1"
-          curl -L -o "$env:TEMP\vpn_bundle.zip" $vpnURL
+          curl.exe -L -o "$env:TEMP\vpn_bundle.zip" $vpnURL
           Expand-Archive -Path "$env:TEMP\vpn_bundle.zip" -DestinationPath "$env:USERPROFILE\Desktop\vpn_bundle" -Force
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn_bundle"
 
       - name: Install VB-CABLE Audio
         run: |
-          curl -L -o "$env:TEMP\VBCABLE.zip" "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
+          curl.exe -L -o "$env:TEMP\VBCABLE.zip" "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
           Expand-Archive -Path "$env:TEMP\VBCABLE.zip" -DestinationPath "$env:TEMP\VBCABLE" -Force
           Start-Process -FilePath "$env:TEMP\VBCABLE\VBCABLE_Setup_x64.exe" -ArgumentList "-i -h"
           Start-Service "AudioSrv", "AudioEndpointBuilder"
