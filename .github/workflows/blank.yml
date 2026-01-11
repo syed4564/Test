@@ -138,15 +138,6 @@ jobs:
           git clone https://github.com/Alex15969/Loop
           cd Loop
           cmd /c loop.bat
-🔥 Final Result
-✔ Discord installs silently
-✔ Desktop shortcut created
-✔ No installer popups
-✔ Stable on GitHub Windows runner
-✔ Works perfectly with CRD
-
-If you want Discord auto-start on login, auto-open after RDP, or disable updates, tell me and I’ll add it 🚀
-
 
 
 No file chosenNo file chosen
