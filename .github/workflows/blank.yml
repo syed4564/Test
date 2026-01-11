@@ -83,37 +83,41 @@ jobs:
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory $extractPath
           Write-Output "✅ VPN Gate logic executed."
 
-      - name: Install Discord (Fixed Download & Shortcut)
+      - name: Install Discord (Fast MSI Method)
         run: |
-          # Force TLS 1.2 for secure downloads
+          $discordMsiUrl = "https://discord.com/api/download/stable?platform=win&format=msi"
+          $msiPath = "$env:TEMP\Discord.msi"
+          
+          Write-Output "📥 Downloading Discord MSI..."
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $discordUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
-          $discordPath = "$env:TEMP\DiscordSetup.exe"
+          Invoke-WebRequest -Uri $discordMsiUrl -OutFile $msiPath -MaximumRedirection 5
           
-          Write-Output "📥 Downloading Discord via API..."
-          Invoke-WebRequest -Uri $discordUrl -OutFile $discordPath -MaximumRedirection 5
+          Write-Output "🚀 Installing Discord silently..."
+          # MSI installs are much faster and don't "hang" the terminal
+          Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /norestart" -Wait
           
-          if (Test-Path $discordPath) {
-              Write-Output "🚀 Running Discord Silent Setup..."
-              Start-Process -FilePath $discordPath -ArgumentList "/S" -Wait
-              Start-Sleep -Seconds 20 # Wait for background extraction
-              
-              # Discord installs to LocalAppData, find the exe
-              $localAppData = $env:LOCALAPPDATA
-              $discordFolder = Get-ChildItem -Path "$localAppData\Discord" -Filter "app-*" | Sort-Object Name -Descending | Select-Object -First 1
-              
-              if ($discordFolder) {
-                  $discordExe = "$($discordFolder.FullName)\Discord.exe"
-                  $shell = New-Object -ComObject WScript.Shell
-                  $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-                  $shortcut.TargetPath = $discordExe
-                  $shortcut.WorkingDirectory = $($discordFolder.FullName)
-                  $shortcut.Save()
-                  Write-Output "✅ Discord installed and shortcut created."
-              }
-          } else {
-              Write-Error "❌ Discord download failed."
-              exit 1
+          Write-Output "✅ Discord installation finished."
+
+      - name: Create Discord Shortcut
+        run: |
+          # The MSI version installs to Program Files or AppData depending on the runner environment
+          # We check both common locations to ensure the shortcut works
+          $paths = @(
+            "${env:ProgramFiles}\Discord\Discord.exe",
+            "${env:ProgramFiles(x86)}\Discord\Discord.exe",
+            "${env:LocalAppData}\Discord\Update.exe"
+          )
+          
+          $exePath = ""
+          foreach ($p in $paths) { if (Test-Path $p) { $exePath = $p; break } }
+
+          if ($exePath) {
+              $shell = New-Object -ComObject WScript.Shell
+              $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
+              $shortcut.TargetPath = $exePath
+              if ($exePath -like "*Update.exe*") { $shortcut.Arguments = "--processStart Discord.exe" }
+              $shortcut.Save()
+              Write-Output "✅ Discord shortcut created."
           }
 
       - name: Install VB-CABLE Virtual Audio Driver
