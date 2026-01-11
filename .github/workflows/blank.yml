@@ -1,30 +1,47 @@
-name: Remote Desktop Colab 1
-on:  
+name: GetScreen.me
+
+on:
   workflow_dispatch:
     inputs:
-      remote_code:
-        description: 'Enter Chrome Remote Desktop Code'
+      email:
+        description: 'Email to use for screen sharing'
         required: true
         type: string
 
 jobs:
   build:
-    name: Start RDP with Software, VPN, Audio, and Loop
+    name: Start Remote Desktop with Email Input
     runs-on: windows-latest
-    steps:
-      - name: Install Chrome Remote Desktop Host
-        run: |
-          $msiUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-          $msiPath = "$env:TEMP\chromeremotedesktophost.msi"
-          Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath
-          Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn" -Wait
 
-      - name: Start Chrome Remote Desktop Session
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Print Email Input
         run: |
-          $code = "${{ github.event.inputs.remote_code }}"
-          $redirect = "https://remotedesktop.google.com/_/oauthredirect"
-          $exePath = "${env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-          Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$env:COMPUTERNAME --pin=123456" -Wait
+          echo "Email Address: ${{ github.event.inputs.email }}"
+          
+      - name: Install GetScreen.me
+        run: |
+          Write-Output "📥 Downloading GetScreen.me..."
+          $url = "https://getscreen.me/download/getscreen.msi"
+          $msiPath = "$env:TEMP\\getscreen.msi"
+          Invoke-WebRequest -Uri $url -OutFile $msiPath
+
+          Write-Output "📦 Installing GetScreen.me..."
+          Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /norestart" -Wait
+          
+          $exePath = "${env:ProgramFiles}\\GetScreen.me\\getscreen.exe"
+          if (Test-Path $exePath) {
+            Write-Output "🔑 Registering GetScreen.me with email..."
+            Start-Process -FilePath $exePath -ArgumentList "-install -register ${{ github.event.inputs.email }} -hidden -no-gui"
+            Start-Sleep -Seconds 10
+            Start-Service -Name "GetScreen" -ErrorAction SilentlyContinue
+            Set-Service -Name "GetScreen" -StartupType Automatic -ErrorAction SilentlyContinue
+            Write-Output "✅ GetScreen.me installed and registered successfully."
+          } else {
+            Write-Error "❌ GetScreen.exe not found after install!"
+          }
 
       - name: Optimization (Resolution + Dark Mode + Black Wallpaper)
         run: |
