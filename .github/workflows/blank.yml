@@ -40,9 +40,9 @@ jobs:
       - name: Fast Software Install (Discord + WinRAR)
         run: |
           Write-Output "📥 Installing Discord and WinRAR via Chocolatey..."
-          # --yes automatically accepts licenses. --no-progress keeps the log clean.
+          # Chocolatey is the most reliable way to avoid 'Access Denied' errors from Discord's CDN
           choco install discord winrar -y --no-progress
-          Write-Output "✅ Discord and WinRAR installed."
+          Write-Output "✅ Discord and WinRAR files downloaded."
 
       - name: Install IDM and Tor Browser
         run: |
@@ -51,7 +51,7 @@ jobs:
           Invoke-WebRequest -Uri $idmUrl -OutFile "$env:TEMP\idm_setup.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
           
-          # Tor Browser (Dropbox Link)
+          # Tor Browser
           $extractPath = "$env:USERPROFILE\browser"
           Invoke-WebRequest -Uri "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1" -OutFile "$env:TEMP\browser.zip"
           Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath $extractPath -Force
@@ -79,18 +79,27 @@ jobs:
           Start-Service "AudioSrv", "AudioEndpointBuilder"
           Write-Output "✅ Audio driver setup triggered."
 
-      - name: Finalize Shortcut and Loop
+      - name: Finalize Discord Shortcut (Fix Launch Issue)
         run: |
-          # Create Discord shortcut from the Choco path
-          $discordPath = "$env:LocalAppData\Discord\Update.exe"
-          if (Test-Path $discordPath) {
-            $shell = New-Object -ComObject WScript.Shell
-            $s = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-            $s.TargetPath = $discordPath
-            $s.Arguments = "--processStart Discord.exe"
-            $s.Save()
-          }
+          Write-Output "🛠️ Fixing Discord Shortcut path..."
+          $localAppData = $env:LOCALAPPDATA
+          # Find the actual folder (e.g., app-1.0.9166)
+          $discordFolder = Get-ChildItem -Path "$localAppData\Discord" -Filter "app-*" | Sort-Object Name -Descending | Select-Object -First 1
           
+          if ($discordFolder) {
+              $exePath = "$($discordFolder.FullName)\Discord.exe"
+              $shell = New-Object -ComObject WScript.Shell
+              $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
+              $shortcut.TargetPath = $exePath
+              $shortcut.WorkingDirectory = "$($discordFolder.FullName)"
+              $shortcut.Save()
+              Write-Output "✅ Direct shortcut created: $exePath"
+          } else {
+              Write-Output "⚠️ Could not find Discord app folder."
+          }
+
+      - name: Clone Loop Repository and Run loop.bat
+        run: |
           git clone https://github.com/Alex15969/Loop
           cd Loop
           cmd /c loop.bat
