@@ -26,11 +26,45 @@ jobs:
           $exePath = "${env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
           Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$env:COMPUTERNAME --pin=123456" -Wait
 
-      - name: Fast Software Install (Discord Canary + WinRAR)
+      - name: Set Screen Resolution
+        shell: cmd
         run: |
-          # Discord Canary works better in server environments/RDP
-          choco install discord-canary winrar -y --no-progress
-          Write-Output "✅ Discord Canary and WinRAR installed."
+          curl -L -o "%TEMP%\nircmd.zip" "https://www.nirsoft.net/utils/nircmd.zip"
+          powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
+          "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
+
+      - name: Install WinRAR (Reliable Method)
+        run: |
+          $url = "https://www.rarlab.com/rar/winrar-x64-712.exe"
+          $path = "$env:TEMP\winrar.exe"
+          Invoke-WebRequest -Uri $url -OutFile $path
+          Start-Process -FilePath $path -ArgumentList "/S" -Wait
+          Write-Output "✅ WinRAR Installed."
+
+      - name: Install Discord (Portable Fix - No Installer)
+        run: |
+          # We download the zip version directly to avoid installer hangs and 404s
+          $discordZipUrl = "https://discord.com/api/download?platform=win&format=zip"
+          $zipPath = "$env:TEMP\discord.zip"
+          $destPath = "C:\Discord"
+          
+          Write-Output "📥 Downloading Discord Archive..."
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          Invoke-WebRequest -Uri $discordZipUrl -OutFile $zipPath -MaximumRedirection 5
+          
+          Write-Output "📦 Extracting Discord..."
+          Expand-Archive -Path $zipPath -DestinationPath $destPath -Force
+          
+          # Create the Shortcut
+          $exePath = Get-ChildItem -Path "$destPath" -Filter "Discord.exe" -Recurse | Select-Object -First 1
+          if ($exePath) {
+              $shell = New-Object -ComObject WScript.Shell
+              $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
+              $shortcut.TargetPath = $exePath.FullName
+              $shortcut.WorkingDirectory = $exePath.DirectoryName
+              $shortcut.Save()
+              Write-Output "✅ Discord Shortcut Created."
+          }
 
       - name: Install IDM and Tor Browser
         run: |
@@ -41,7 +75,6 @@ jobs:
           $extractPath = "$env:USERPROFILE\browser"
           Invoke-WebRequest -Uri "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1" -OutFile "$env:TEMP\browser.zip"
           Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath $extractPath -Force
-          # Tor Shortcut
           $shell = New-Object -ComObject WScript.Shell
           $s = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
           $s.TargetPath = "$extractPath\Browser\firefox.exe"
@@ -60,28 +93,6 @@ jobs:
           Expand-Archive -Path "$env:TEMP\VBCABLE.zip" -DestinationPath "$env:TEMP\VBCABLE" -Force
           Start-Process -FilePath "$env:TEMP\VBCABLE\VBCABLE_Setup_x64.exe" -ArgumentList "-i -h"
           Start-Service "AudioSrv", "AudioEndpointBuilder"
-
-      - name: Finalize Discord Launch (The "RDP Fix")
-        run: |
-          $appData = $env:LOCALAPPDATA
-          # Find Discord Canary (usually more stable for this)
-          $discordPath = Get-ChildItem -Path "$appData\DiscordCanary" -Filter "Discord.exe" -Recurse | Select-Object -First 1
-          
-          if ($discordPath) {
-              # 1. Create a bulletproof Desktop Shortcut
-              $shell = New-Object -ComObject WScript.Shell
-              $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-              $shortcut.TargetPath = $discordPath.FullName
-              $shortcut.WorkingDirectory = $discordPath.DirectoryName
-              $shortcut.Save()
-
-              # 2. Kill any ghost processes that might be blocking the UI
-              taskkill /F /IM "DiscordCanary.exe" /T 2>$null
-              
-              # 3. Launch it properly so it shows up in your session
-              Write-Output "🚀 Forcing Discord to open..."
-              Start-Process -FilePath $discordPath.FullName
-          }
 
       - name: Clone Loop Repository and Run loop.bat
         run: |
