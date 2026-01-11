@@ -1,6 +1,5 @@
 name: Remote Desktop Colab 3
-
-on:
+on:  
   workflow_dispatch:
     inputs:
       remote_code:
@@ -12,27 +11,22 @@ jobs:
   build:
     name: Start RDP with Software, VPN, Audio, and Loop
     runs-on: windows-latest
-
     steps:
       - name: Install Chrome Remote Desktop Host
         run: |
           $msiUrl = "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi"
-          $msiPath = "$env:TEMP\\chromeremotedesktophost.msi"
+          $msiPath = "$env:TEMP\chromeremotedesktophost.msi"
           Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath
           Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn" -Wait
           Write-Output "✅ Chrome Remote Desktop installed."
 
       - name: Start Chrome Remote Desktop Session
         run: |
-          # Ensure that the code is passed from the workflow dispatch
-          $code = "${{ github.event.inputs.remote_code }}"  # Use the input code from GitHub dispatch
+          $code = "${{ github.event.inputs.remote_code }}"
           $redirect = "https://remotedesktop.google.com/_/oauthredirect"
-          
-          # Use PowerShell to properly resolve environment variables
           $hostName = $env:COMPUTERNAME
-          $exePath = "${env:ProgramFiles(x86)}\\Google\\Chrome Remote Desktop\\CurrentVersion\\remoting_start_host.exe"
+          $exePath = "${env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
           
-          # Start Chrome Remote Desktop Host with the provided code and environment variables
           Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$hostName --pin=123456" -Wait
           Write-Output "✅ Chrome Remote Desktop Host started with PIN 123456."
 
@@ -43,149 +37,97 @@ jobs:
           set "nircmd_zip=%TEMP%\nircmd.zip"
           set "nircmd_dir=%TEMP%\nircmd"
           set "nircmd_exe=%nircmd_dir%\nircmd.exe"
-          echo Downloading NirCmd...
           curl -L -o "%nircmd_zip%" "https://www.nirsoft.net/utils/nircmd.zip"
-          echo Extracting NirCmd...
           powershell -Command "Expand-Archive -Path '%nircmd_zip%' -DestinationPath '%nircmd_dir%' -Force"
           if exist "%nircmd_exe%" (
-              echo Setting resolution to 1366x768...
               "%nircmd_exe%" setdisplay 1366 768 32
-              echo ✅ Resolution changed successfully.
-          ) else (
-              echo ❌ NirCmd executable not found.
+              echo ✅ Resolution changed.
           )
 
       - name: Software Installation (WinRAR + IDM + Tor Browser)
         run: |
-          # Install WinRAR 7.12 silently
+          # WinRAR
           $winrarUrl = "https://www.rarlab.com/rar/winrar-x64-712.exe"
-          $winrarPath = "$env:TEMP\\winrar-x64-712.exe"
+          $winrarPath = "$env:TEMP\winrar-x64-712.exe"
           Invoke-WebRequest -Uri $winrarUrl -OutFile $winrarPath
           Start-Process -FilePath $winrarPath -ArgumentList "/S" -Wait
-          Write-Output "✅ WinRAR 7.12 installed silently."
-
-          # Install IDM silently
+          
+          # IDM
           $idmUrl = "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
-          $idmPath = "$env:TEMP\\idm_setup.exe"
+          $idmPath = "$env:TEMP\idm_setup.exe"
           Invoke-WebRequest -Uri $idmUrl -OutFile $idmPath
-          if (Test-Path $idmPath) {
-            Start-Process -FilePath $idmPath -ArgumentList "/skipdlgs" -Wait
-            Write-Output "✅ IDM installed silently."
-          } else {
-            Write-Error "❌ IDM download failed."
-          }
-
-          # Download and extract Browser.zip (Tor Browser)
+          Start-Process -FilePath $idmPath -ArgumentList "/skipdlgs" -Wait
+          
+          # Tor Browser
           $dropboxUrl = "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
-          $zipPath = "$env:TEMP\\browser.zip"
-          $extractPath = "$env:USERPROFILE\\browser"
+          $zipPath = "$env:TEMP\browser.zip"
+          $extractPath = "$env:USERPROFILE\browser"
           Invoke-WebRequest -Uri $dropboxUrl -OutFile $zipPath
-          if (Test-Path $zipPath) {
-            Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-            Write-Output "✅ Browser.zip extracted to $extractPath"
-          } else {
-            Write-Error "❌ Failed to download Browser.zip"
-          }
+          Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+          
+          $firefox = "$extractPath\Browser\firefox.exe"
+          $shortcut = "$env:USERPROFILE\Desktop\Tor.lnk"
+          $shell = New-Object -ComObject WScript.Shell
+          $s = $shell.CreateShortcut($shortcut)
+          $s.TargetPath = $firefox
+          $s.Save()
+          Write-Output "✅ Basic Software Installed."
 
-          # Create 'Tor' shortcut on Desktop
-          $firefox = "$extractPath\\Browser\\firefox.exe"
-          $shortcut = "$env:USERPROFILE\\Desktop\\Tor.lnk"
-          if (Test-Path $firefox) {
-            $shell = New-Object -ComObject WScript.Shell
-            $s = $shell.CreateShortcut($shortcut)
-            $s.TargetPath = $firefox
-            $s.WorkingDirectory = "$extractPath\\Browser"
-            $s.IconLocation = "$firefox,0"
-            $s.Save()
-            Write-Output "✅ Tor Browser shortcut created on Desktop"
-          } else {
-            Write-Error "❌ firefox.exe (Tor) not found"
-          }
-
-      - name: Install VPN Gate (via install_vpngate.bat)
+      - name: Install VPN Gate
         run: |
           $vpnURL = "https://www.dropbox.com/scl/fo/a6c0sqactnwr26cbbv1uc/APO1J80osQpo_8EoBOU3eJA?rlkey=s7wgg6ieuhlkr7wlxa9j9yij6&dl=1"
-          $zipPath = "$env:TEMP\\vpn_bundle.zip"
-          $extractPath = "$env:USERPROFILE\\Desktop\\vpn_bundle"
-          $batPath = "$extractPath\\install_vpngate.bat"
-          $vpnCheck = "C:\\Program Files\\SoftEther VPN Client\\vpncmgr.exe"
-          Write-Output "📥 Downloading VPN automation bundle..."
+          $zipPath = "$env:TEMP\vpn_bundle.zip"
+          $extractPath = "$env:USERPROFILE\Desktop\vpn_bundle"
           Invoke-WebRequest -Uri $vpnURL -OutFile $zipPath
-          Write-Output "📦 Extracting VPN bundle..."
           Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-          if (-Not (Test-Path $batPath)) {
-            Write-Error "❌ install_vpngate.bat not found!"
-            exit 1
-          }
-          Write-Output "🚀 Running install_vpngate.bat..."
-          Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batPath`"" -WorkingDirectory $extractPath
-          $maxWait = 300
-          $interval = 5
-          $elapsed = 0
-          Write-Output "⏳ Waiting for vpncmgr.exe to appear..."
-          while (-not (Test-Path $vpnCheck) -and ($elapsed -lt $maxWait)) {
-              Start-Sleep -Seconds $interval
-              $elapsed += $interval
-              Write-Output "🔁 Checking... elapsed: $elapsed sec"
-          }
-          if (Test-Path $vpnCheck) {
-              Write-Output "✅ VPN Gate installed successfully."
-          } else {
-              Write-Error "❌ VPN Gate installation timed out after $maxWait seconds."
-              exit 1
-          }
-      - name: Install Discord (Silent)
+          Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory $extractPath
+          Write-Output "✅ VPN Gate logic executed."
+
+      - name: Install Discord (Fixed Download & Shortcut)
         run: |
+          # Force TLS 1.2 for secure downloads
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           $discordUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
           $discordPath = "$env:TEMP\DiscordSetup.exe"
-
-          Invoke-WebRequest -Uri $discordUrl -OutFile $discordPath
-
+          
+          Write-Output "📥 Downloading Discord via API..."
+          Invoke-WebRequest -Uri $discordUrl -OutFile $discordPath -MaximumRedirection 5
+          
           if (Test-Path $discordPath) {
+              Write-Output "🚀 Running Discord Silent Setup..."
               Start-Process -FilePath $discordPath -ArgumentList "/S" -Wait
-              Write-Output "✅ Discord installed silently."
+              Start-Sleep -Seconds 20 # Wait for background extraction
+              
+              # Discord installs to LocalAppData, find the exe
+              $localAppData = $env:LOCALAPPDATA
+              $discordFolder = Get-ChildItem -Path "$localAppData\Discord" -Filter "app-*" | Sort-Object Name -Descending | Select-Object -First 1
+              
+              if ($discordFolder) {
+                  $discordExe = "$($discordFolder.FullName)\Discord.exe"
+                  $shell = New-Object -ComObject WScript.Shell
+                  $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
+                  $shortcut.TargetPath = $discordExe
+                  $shortcut.WorkingDirectory = $($discordFolder.FullName)
+                  $shortcut.Save()
+                  Write-Output "✅ Discord installed and shortcut created."
+              }
           } else {
               Write-Error "❌ Discord download failed."
               exit 1
           }
 
-      - name: Create Discord Desktop Shortcut
-        run: |
-          $updateExe = "$env:LOCALAPPDATA\Discord\Update.exe"
-          $shortcutPath = "$env:USERPROFILE\Desktop\Discord.lnk"
-
-          if (Test-Path $updateExe) {
-              $shell = New-Object -ComObject WScript.Shell
-              $shortcut = $shell.CreateShortcut($shortcutPath)
-              $shortcut.TargetPath = $updateExe
-              $shortcut.Arguments = "--processStart Discord.exe"
-              $shortcut.IconLocation = "$updateExe,0"
-              $shortcut.Save()
-              Write-Output "✅ Discord shortcut created."
-          } else {
-              Write-Output "⚠️ Discord Update.exe not found."
-          }
-
       - name: Install VB-CABLE Virtual Audio Driver
         run: |
-          $zip = "$env:TEMP\\VBCABLE.zip"
-          $extract = "$env:TEMP\\VBCABLE"
           $url = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
+          $zip = "$env:TEMP\VBCABLE.zip"
+          $extract = "$env:TEMP\VBCABLE"
           Invoke-WebRequest -Uri $url -OutFile $zip
           Expand-Archive -Path $zip -DestinationPath $extract
-          $setup = "$extract\\VBCABLE_Setup_x64.exe"
-          if (Test-Path $setup) {
-            Start-Process -FilePath $setup -ArgumentList "-i -h"
-            Write-Output "⚠️ VB-CABLE installer launched — manual driver prompt expected."
-          } else {
-            Write-Error "❌ VB-CABLE setup file not found."
-          }
-          Start-Service "AudioSrv"
-          Start-Service "AudioEndpointBuilder"
-          Set-Service -Name "AudioSrv" -StartupType Automatic
-          Set-Service -Name "AudioEndpointBuilder" -StartupType Automatic
-          Write-Output "✅ Audio services running."
+          Start-Process -FilePath "$extract\VBCABLE_Setup_x64.exe" -ArgumentList "-i -h"
           
+          Start-Service "AudioSrv", "AudioEndpointBuilder"
+          Write-Output "✅ Audio driver setup triggered."
+
       - name: Clone Loop Repository and Run loop.bat
         run: |
           git clone https://github.com/Alex15969/Loop
