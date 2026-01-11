@@ -1,4 +1,4 @@
-name: Remote Desktop Colab
+name: Remote Desktop Colab 3
 
 on:
   workflow_dispatch:
@@ -134,7 +134,7 @@ jobs:
               Write-Error "❌ VPN Gate installation timed out after $maxWait seconds."
               exit 1
           }
-        - name: Install Discord (Silent)
+      - name: Install Discord (Silent)
         run: |
           $discordUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
           $discordPath = "$env:TEMP\DiscordSetup.exe"
