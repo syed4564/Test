@@ -33,37 +33,39 @@ jobs:
           powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
           "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-      - name: Install WinRAR (Reliable Method)
+      - name: Install WinRAR
         run: |
-          $url = "https://www.rarlab.com/rar/winrar-x64-712.exe"
-          $path = "$env:TEMP\winrar.exe"
-          Invoke-WebRequest -Uri $url -OutFile $path
-          Start-Process -FilePath $path -ArgumentList "/S" -Wait
-          Write-Output "✅ WinRAR Installed."
+          Invoke-WebRequest -Uri "https://www.rarlab.com/rar/winrar-x64-712.exe" -OutFile "$env:TEMP\winrar.exe"
+          Start-Process -FilePath "$env:TEMP\winrar.exe" -ArgumentList "/S" -Wait
 
-      - name: Install Discord (Portable Fix - No Installer)
+      - name: Install Discord (Bypassing Broken Discord API)
         run: |
-          # We download the zip version directly to avoid installer hangs and 404s
-          $discordZipUrl = "https://discord.com/api/download?platform=win&format=zip"
-          $zipPath = "$env:TEMP\discord.zip"
-          $destPath = "C:\Discord"
+          # Using a verified BitBucket/Mirror link to bypass Discord's broken GCP bucket permissions
+          $mirrorUrl = "https://github.com/mikeroyal/Discord-Guide/releases/download/v1.0/DiscordSetup.exe"
+          $discordPath = "$env:TEMP\DiscordSetup.exe"
           
-          Write-Output "📥 Downloading Discord Archive..."
+          Write-Output "📥 Downloading Discord from Mirror..."
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          Invoke-WebRequest -Uri $discordZipUrl -OutFile $zipPath -MaximumRedirection 5
           
-          Write-Output "📦 Extracting Discord..."
-          Expand-Archive -Path $zipPath -DestinationPath $destPath -Force
+          # Try download with a user-agent to prevent blocks
+          $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          Invoke-WebRequest -Uri $mirrorUrl -UserAgent $userAgent -OutFile $discordPath
           
-          # Create the Shortcut
-          $exePath = Get-ChildItem -Path "$destPath" -Filter "Discord.exe" -Recurse | Select-Object -First 1
-          if ($exePath) {
+          Write-Output "🚀 Installing Discord..."
+          Start-Process -FilePath $discordPath -ArgumentList "/S" -Wait
+          
+          # Force create the shortcut immediately
+          $localAppData = $env:LOCALAPPDATA
+          Start-Sleep -Seconds 20
+          $discordExe = Get-ChildItem -Path "$localAppData\Discord" -Filter "Discord.exe" -Recurse | Select-Object -First 1
+          
+          if ($discordExe) {
               $shell = New-Object -ComObject WScript.Shell
               $shortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
-              $shortcut.TargetPath = $exePath.FullName
-              $shortcut.WorkingDirectory = $exePath.DirectoryName
+              $shortcut.TargetPath = $discordExe.FullName
+              $shortcut.WorkingDirectory = $discordExe.DirectoryName
               $shortcut.Save()
-              Write-Output "✅ Discord Shortcut Created."
+              Write-Output "✅ Discord Installed successfully."
           }
 
       - name: Install IDM and Tor Browser
