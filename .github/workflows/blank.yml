@@ -26,73 +26,82 @@ jobs:
           $exePath = "${env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
           Start-Process -FilePath "$exePath" -ArgumentList "--code=$code --redirect-url=$redirect --name=$env:COMPUTERNAME --pin=123456" -Wait
 
-      - name: Set Resolution, Dark Mode & Solid Black Wallpaper
+      - name: Set Screen Resolution
+        shell: cmd
         run: |
-          # 1. Setup NirCmd for Resolution
-          curl.exe -L -o "$env:TEMP\nircmd.zip" "https://www.nirsoft.net/utils/nircmd.zip"
-          Expand-Archive -Path "$env:TEMP\nircmd.zip" -DestinationPath "$env:TEMP\nircmd" -Force
-          & "$env:TEMP\nircmd\nircmd.exe" setdisplay 1366 768 32
+          curl -L -o "%TEMP%\nircmd.zip" "https://www.nirsoft.net/utils/nircmd.zip"
+          powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
+          "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-          # 2. Force Dark Mode (System + Taskbar + Apps)
-          $ThemePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-          if (-not (Test-Path $ThemePath)) { New-Item -Path $ThemePath -Force }
-          Set-ItemProperty -Path $ThemePath -Name "SystemUsesLightTheme" -Value 0
-          Set-ItemProperty -Path $ThemePath -Name "AppsUseLightTheme" -Value 0
+      - name: Personalization (Dark Mode + Solid Black Wallpaper)
+        run: |
+          # 1. Force Dark Mode for System and Apps
+          $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force }
+          Set-ItemProperty -Path $regPath -Name "SystemUsesLightTheme" -Value 0
+          Set-ItemProperty -Path $regPath -Name "AppsUseLightTheme" -Value 0
 
-          # 3. Create a REAL Black Wallpaper Image (Fixed Method)
-          Add-Type -AssemblyName System.Drawing
-          $bmp = New-Object System.Drawing.Bitmap 1920, 1080
-          $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-          $graphics.Clear([System.Drawing.Color]::Black)
-          $wallPath = "$env:TEMP\black_wallpaper.bmp"
-          $bmp.Save($wallPath)
-          $graphics.Dispose()
-          $bmp.Dispose()
+          # 2. Set Wallpaper to Solid Black (Removes Spotlight/Images)
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
+          Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name "Background" -Value "0 0 0"
+          # Refresh the desktop to apply changes
+          rundll32.exe user32.dll,UpdatePerUserSystemParameters
+          Write-Output "✅ Dark Mode enabled and Wallpaper set to Black."
 
-          # 4. Apply the Black Wallpaper Image to Registry
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value $wallPath
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WallpaperStyle" -Value "2" 
-
-          # 5. RESTART EXPLORER (Crucial for Black Wallpaper & Dark Taskbar to show)
-          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 3
-          Start-Process explorer.exe
-          Write-Output "✅ UI Refreshed: Dark Mode & Black Wallpaper Active."
+      - name: Set Chrome as Default (Priority Fix)
+        run: |
+          # Download a small utility that bypasses 'Access Denied' for default browsers
+          curl.exe -L -o "$env:TEMP\SetDefaultBrowser.zip" "https://github.com/sampalmer/set-default-browser/releases/download/v1.4.0/set-default-browser.zip"
+          Expand-Archive -Path "$env:TEMP\SetDefaultBrowser.zip" -DestinationPath "$env:TEMP\sdb" -Force
+          
+          # Use the utility to set Chrome as default for all protocols
+          if (Test-Path "$env:TEMP\sdb\SetDefaultBrowser.exe") {
+              Start-Process "$env:TEMP\sdb\SetDefaultBrowser.exe" -ArgumentList "chrome" -Wait
+              Write-Output "✅ Chrome set as default browser successfully."
+          }
 
       - name: Install WinRAR & IDM
         run: |
           curl.exe -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
           Start-Process -FilePath "$env:TEMP\winrar.exe" -ArgumentList "/S" -Wait
+          
           curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
-
-      - name: Set IDM to Run at Startup
-        run: |
+          
+          # IDM Startup configuration
           $idmPath = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
           if (Test-Path $idmPath) {
               Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
               Start-Process -FilePath $idmPath -ArgumentList "/onstartup"
           }
 
-      - name: Install VPN Gate
+      - name: Install VPN Gate (Priority)
         run: |
           $vpnURL = "https://www.dropbox.com/scl/fo/a6c0sqactnwr26cbbv1uc/APO1J80osQpo_8EoBOU3eJA?rlkey=s7wgg6ieuhlkr7wlxa9j9yij6&dl=1"
           curl.exe -L -o "$env:TEMP\vpn_bundle.zip" $vpnURL
           Expand-Archive -Path "$env:TEMP\vpn_bundle.zip" -DestinationPath "$env:USERPROFILE\Desktop\vpn_bundle" -Force
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c install_vpngate.bat" -WorkingDirectory "$env:USERPROFILE\Desktop\vpn_bundle"
 
-      - name: Install Discord & Tor
+      - name: Install Discord (Fast Method)
         run: |
-          # Discord
           $url = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
           curl.exe -L $url -o "$env:TEMP\DiscordSetup.exe"
           Start-Process -FilePath "$env:TEMP\DiscordSetup.exe" -ArgumentList "/S"
+
+      - name: Setup Shortcuts & Tor
+        run: |
+          $shell = New-Object -ComObject WScript.Shell
           
-          # Tor
+          # Discord Shortcut
+          $updateExe = "$env:LOCALAPPDATA\Discord\Update.exe"
+          $dShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
+          $dShortcut.TargetPath = $updateExe
+          $dShortcut.Arguments = "--processStart Discord.exe"
+          $dShortcut.Save()
+
+          # Tor Browser
           curl.exe -L -o "$env:TEMP\browser.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
           Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath "$env:USERPROFILE\browser" -Force
-          
-          $shell = New-Object -ComObject WScript.Shell
           $tShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
           $tShortcut.TargetPath = "$env:USERPROFILE\browser\Browser\firefox.exe"
           $tShortcut.Save()
