@@ -33,21 +33,35 @@ jobs:
           powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
           "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-      - name: Personalization (Dark Mode + Solid Black Wallpaper)
+      - name: Personalization (Dark Mode Taskbar + Solid Black Wallpaper)
         run: |
-          # 1. Force Dark Mode for System and Apps
-          $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-          if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force }
-          Set-ItemProperty -Path $regPath -Name "SystemUsesLightTheme" -Value 0
-          Set-ItemProperty -Path $regPath -Name "AppsUseLightTheme" -Value 0
+          # 1. Force Dark Mode for Apps AND System (Taskbar/Start Menu)
+          $themePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (-not (Test-Path $themePath)) { New-Item -Path $themePath -Force }
+          Set-ItemProperty -Path $themePath -Name "AppsUseLightTheme" -Value 0
+          Set-ItemProperty -Path $themePath -Name "SystemUsesLightTheme" -Value 0
+          Set-ItemProperty -Path $themePath -Name "ColorPrevalence" -Value 0
 
-          # 2. Set Wallpaper to Solid Black (Removes Spotlight/Images)
+          # 2. Set Solid Black Wallpaper
           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
           Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name "Background" -Value "0 0 0"
-          # Refresh the desktop to apply changes
-          rundll32.exe user32.dll,UpdatePerUserSystemParameters
-          Write-Output "✅ Dark Mode enabled and Wallpaper set to Black."
+          
+          # 3. Refresh UI to apply Dark Taskbar and Black Background
+          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+          Write-Output "✅ Taskbar Dark Mode and Black Wallpaper applied."
 
+      - name: Set Chrome as Default (Direct Path Method)
+        run: |
+          # Download Utility to bypass Registry Access Denied
+          curl.exe -L -o "$env:TEMP\sdb.zip" "https://github.com/sampalmer/set-default-browser/releases/download/v1.4.0/set-default-browser.zip"
+          Expand-Archive -Path "$env:TEMP\sdb.zip" -DestinationPath "$env:TEMP\sdb" -Force
+          
+          $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+          if (Test-Path $chromePath) {
+              # Register and Set via Utility
+              Start-Process "$env:TEMP\sdb\SetDefaultBrowser.exe" -ArgumentList "chrome" -Wait
+              Write-Output "✅ Chrome set as default using direct path."
+          }
 
       - name: Install WinRAR & IDM
         run: |
@@ -57,7 +71,6 @@ jobs:
           curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
           
-          # IDM Startup configuration
           $idmPath = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
           if (Test-Path $idmPath) {
               Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
