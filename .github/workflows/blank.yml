@@ -35,35 +35,26 @@ jobs:
 
       - name: Windows Personalization (Dark Theme + Spotlight)
         run: |
-          # Enable Dark Mode for System and Apps
-          $themePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-          if (!(Test-Path $themePath)) { New-Item -Path $themePath -Force }
-          Set-ItemProperty -Path $themePath -Name "SystemUsesLightTheme" -Value 0
-          Set-ItemProperty -Path $themePath -Name "AppsUseLightTheme" -Value 0
+          # Dark Mode Fix
+          $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force }
+          Set-ItemProperty -Path $regPath -Name "SystemUsesLightTheme" -Value 0 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $regPath -Name "AppsUseLightTheme" -Value 0 -ErrorAction SilentlyContinue
           
-          # Enable Windows Spotlight Background
+          # Spotlight Fix
           $wallPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Wallpapers"
-          if (!(Test-Path $wallPath)) { New-Item -Path $wallPath -Force }
-          Set-ItemProperty -Path $wallPath -Name "BackgroundType" -Value 2
-          Write-Output "✅ Dark Mode and Spotlight applied."
+          if (-not (Test-Path $wallPath)) { New-Item -Path $wallPath -Force }
+          Set-ItemProperty -Path $wallPath -Name "BackgroundType" -Value 2 -ErrorAction SilentlyContinue
+          Write-Output "✅ Appearance set to Dark/Spotlight."
 
-      - name: Set Chrome as Default Browser
+      - name: Set Chrome as Default (Safe Method)
         run: |
-          # Locate pre-installed Chrome
+          # Use the official App Association command instead of direct registry editing to avoid 'Access Denied'
           $chromePath = "${env:ProgramFiles}\Google\Chrome\Application\chrome.exe"
           if (Test-Path $chromePath) {
-              $progId = "ChromeHTML"
-              $assocPaths = @(
-                  "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice",
-                  "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
-                  "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice",
-                  "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.htm\UserChoice"
-              )
-              foreach ($path in $assocPaths) {
-                  if (!(Test-Path $path)) { New-Item -Path $path -Force }
-                  Set-ItemProperty -Path $path -Name "ProgId" -Value $progId
-              }
-              Write-Output "✅ Chrome found and set as default."
+              # This triggers the system to register Chrome as the primary handler
+              Start-Process "$chromePath" -ArgumentList "--make-default-browser"
+              Write-Output "✅ Chrome signaled as default browser."
           }
 
       - name: Install WinRAR & IDM
@@ -78,6 +69,7 @@ jobs:
           if (Test-Path $idmPath) {
               Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
               Start-Process -FilePath $idmPath -ArgumentList "/onstartup"
+              Write-Output "✅ IDM Startup Configured."
           }
 
       - name: Install VPN Gate (Priority)
