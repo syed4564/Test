@@ -33,31 +33,37 @@ jobs:
           powershell -Command "Expand-Archive -Path '%TEMP%\nircmd.zip' -DestinationPath '%TEMP%\nircmd' -Force"
           "%TEMP%\nircmd\nircmd.exe" setdisplay 1366 768 32
 
-      - name: Personalization (Dark Mode + Solid Black Wallpaper)
+      - name: Force Dark Mode & Solid Black Wallpaper
         run: |
-          # 1. Force Dark Mode for System and Apps
-          $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-          if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force }
-          Set-ItemProperty -Path $regPath -Name "SystemUsesLightTheme" -Value 0
-          Set-ItemProperty -Path $regPath -Name "AppsUseLightTheme" -Value 0
+          Write-Output "🌙 Setting Dark Theme and Black Wallpaper..."
+          
+          # 1. Enable Dark Mode for Apps and System (Taskbar)
+          $RegistryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+          if (-not (Test-Path $RegistryPath)) { New-Item -Path $RegistryPath -Force }
+          Set-ItemProperty -Path $RegistryPath -Name "AppsUseLightTheme" -Value 0
+          Set-ItemProperty -Path $RegistryPath -Name "SystemUsesLightTheme" -Value 0
 
-          # 2. Set Wallpaper to Solid Black (Removes Spotlight/Images)
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
+          # 2. Set Background to Solid Black
           Set-ItemProperty -Path "HKCU:\Control Panel\Colors" -Name "Background" -Value "0 0 0"
-          # Refresh the desktop to apply changes
-          rundll32.exe user32.dll,UpdatePerUserSystemParameters
-          Write-Output "✅ Dark Mode enabled and Wallpaper set to Black."
-
+          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Wallpaper" -Value ""
+          
+          # 3. Force Refresh UI by restarting Explorer
+          # This ensures the taskbar actually turns dark and wallpaper applies immediately
+          Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          Start-Process explorer.exe
+          
+          Write-Output "✅ UI Personalization applied successfully."
 
       - name: Install WinRAR & IDM
         run: |
           curl.exe -L -o "$env:TEMP\winrar.exe" "https://www.rarlab.com/rar/winrar-x64-712.exe"
           Start-Process -FilePath "$env:TEMP\winrar.exe" -ArgumentList "/S" -Wait
-          
           curl.exe -L -o "$env:TEMP\idm_setup.exe" "https://mirror2.internetdownloadmanager.com/idman642build41.exe"
           Start-Process -FilePath "$env:TEMP\idm_setup.exe" -ArgumentList "/skipdlgs" -Wait
-          
-          # IDM Startup configuration
+
+      - name: Set IDM to Run at Startup
+        run: |
           $idmPath = "${env:ProgramFiles(x86)}\Internet Download Manager\IDMan.exe"
           if (Test-Path $idmPath) {
               Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "IDMan" -Value "`"$idmPath`" /onstartup"
@@ -80,17 +86,15 @@ jobs:
       - name: Setup Shortcuts & Tor
         run: |
           $shell = New-Object -ComObject WScript.Shell
-          
-          # Discord Shortcut
           $updateExe = "$env:LOCALAPPDATA\Discord\Update.exe"
           $dShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Discord.lnk")
           $dShortcut.TargetPath = $updateExe
           $dShortcut.Arguments = "--processStart Discord.exe"
           $dShortcut.Save()
 
-          # Tor Browser
-          curl.exe -L -o "$env:TEMP\browser.zip" "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
-          Expand-Archive -Path "$env:TEMP\browser.zip" -DestinationPath "$env:USERPROFILE\browser" -Force
+          $torZip = "$env:TEMP\browser.zip"
+          curl.exe -L -o $torZip "https://www.dropbox.com/scl/fi/faraacel5x4ssj5clo2j1/Browser.zip?rlkey=81rsd6nbwk2p95e0t3mpcirfi&st=3pnv7hia&dl=1"
+          Expand-Archive -Path $torZip -DestinationPath "$env:USERPROFILE\browser" -Force
           $tShortcut = $shell.CreateShortcut("$env:USERPROFILE\Desktop\Tor.lnk")
           $tShortcut.TargetPath = "$env:USERPROFILE\browser\Browser\firefox.exe"
           $tShortcut.Save()
